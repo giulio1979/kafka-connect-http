@@ -33,6 +33,7 @@ import java.util.stream.Stream;
 
 import static com.github.castorm.kafka.connect.common.CollectionUtils.merge;
 import static java.util.Collections.emptyMap;
+import static java.util.stream.Collectors.toMap;
 
 @RequiredArgsConstructor
 public class JacksonResponseRecordParser implements Configurable {
@@ -44,6 +45,7 @@ public class JacksonResponseRecordParser implements Configurable {
     private final JacksonSerializer serializer;
 
     private JsonPointer recordsPointer;
+    private Map<String, JsonPointer> responseOffsetPointers;
 
     public JacksonResponseRecordParser() {
         this(new JacksonRecordParser(), new JacksonSerializer(new ObjectMapper()));
@@ -57,6 +59,7 @@ public class JacksonResponseRecordParser implements Configurable {
     public void configure(Map<String, ?> settings) {
         JacksonRecordParserConfig config = configFactory.apply(settings);
         recordsPointer = config.getRecordsPointer();
+        responseOffsetPointers = config.getResponseOffsetPointers();
     }
 
     Stream<JacksonRecord> getRecords(byte[] body) {
@@ -70,7 +73,8 @@ public class JacksonResponseRecordParser implements Configurable {
     }
 
     private Map<String, Object> getResponseOffset(JsonNode node) {
-        return emptyMap();
+        return responseOffsetPointers.entrySet().stream()
+                .collect(toMap(Map.Entry::getKey, entry -> serializer.getObjectAt(node, entry.getValue()).asText()));
     }
 
     private JacksonRecord toJacksonRecord(JsonNode jsonRecord, Map<String, Object> responseOffset) {
