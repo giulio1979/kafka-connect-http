@@ -42,6 +42,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 
 import static com.github.castorm.kafka.connect.http.HttpSourceTaskTest.Fixture.offset;
@@ -298,14 +299,14 @@ class HttpSourceTaskTest {
     interface Fixture {
         Instant now = now();
         String key = "customKey";
-        Map<String, Object> offsetMap = ImmutableMap.of("custom", "value", "key", key, "timestamp", now.toString());
-        Map<String, String> offsetInitialMap = ImmutableMap.of("k2", "v2");
+        Map<String, Object> offsetMap = new HashMap<>(ImmutableMap.of("custom", "value", "key", key, "timestamp", now.toString()));
+        Map<String, String> offsetInitialMap = new HashMap<>(ImmutableMap.of("k2", "v2"));
         Offset offset = Offset.of(offsetMap);
         HttpRequest request = HttpRequest.builder().build();
         HttpResponse response = HttpResponse.builder().build();
 
         static Map<String, Object> offsetMap(Object value) {
-            return ImmutableMap.of("custom", value, "key", key, "timestamp", now.toString());
+            return new HashMap<>(ImmutableMap.of("custom", value, "key", key, "timestamp", now.toString()));
         }
 
         static SourceRecord record(Map<String, Object> offset) {

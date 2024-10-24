@@ -3,7 +3,7 @@
     <parent>
         <artifactId>kafka-connect-http-parent</artifactId>
         <groupId>com.github.castorm</groupId>
-        <version>0.8.12-SNAPSHOT</version>
+        <version>0.8.13</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -88,21 +88,6 @@
             </activation>
             <build>
                 <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-jar-plugin</artifactId>
-                        <version>3.4.1</version>
-                        <executions>
-                            <execution>
-                                <goals>
-                                    <goal>jar</goal>
-                                </goals>
-                                <configuration>
-                                    <classifier>sources</classifier> <!-- Use classifier for supplemental artifacts -->
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
                     <plugin>
                         <artifactId>maven-assembly-plugin</artifactId>
                         <version>3.3.0</version>

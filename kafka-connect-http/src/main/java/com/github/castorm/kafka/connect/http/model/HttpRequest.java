@@ -24,6 +24,7 @@ import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Value;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -49,5 +50,14 @@ public class HttpRequest {
 
     public enum HttpMethod {
         GET, HEAD, POST, PUT, PATCH
+    }
+
+    @Override
+    public String toString() {
+        return "HttpRequest{" +
+                "method=" + method +
+                ", url='" + url + '\'' +
+                ", queryParams=" + queryParams +
+                '}';
     }
 }

@@ -73,7 +73,10 @@ public class JacksonResponseRecordParser implements Configurable {
     }
 
     private Map<String, Object> getResponseOffset(JsonNode node) {
-        return responseOffsetPointers.entrySet().stream()
+        if(responseOffsetPointers.isEmpty())
+            return emptyMap();
+        else
+            return responseOffsetPointers.entrySet().stream()
                 .collect(toMap(Map.Entry::getKey, entry -> serializer.getObjectAt(node, entry.getValue()).asText()));
     }
 

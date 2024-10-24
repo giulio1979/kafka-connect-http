@@ -24,6 +24,7 @@ import com.github.castorm.kafka.connect.http.model.HttpResponse;
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.connect.source.SourceRecord;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +32,10 @@ import java.util.Map;
 public interface HttpResponseParser extends Configurable {
 
     List<SourceRecord> parse(HttpResponse response);
+
+    public default Map<String, String> getOffsetReset() {
+        return Collections.emptyMap();
+    }
 
     default void configure(Map<String, ?> map) {
         // Do nothing

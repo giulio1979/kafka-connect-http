@@ -55,6 +55,7 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     private static final String RECORD_SORTER = "http.record.sorter";
     private static final String RECORD_FILTER_FACTORY = "http.record.filter.factory";
     private static final String OFFSET_INITIAL = "http.offset.initial";
+    private static final String NEXT_PAGE_OFFSET = "http.offset.nextpage";
 
     private final TimerThrottler throttler;
     private final HttpRequestFactory requestFactory;
@@ -63,6 +64,7 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     private final SourceRecordFilterFactory recordFilterFactory;
     private final SourceRecordSorter recordSorter;
     private final Map<String, String> initialOffset;
+    private String nextPageOffset;
 
     HttpSourceConnectorConfig(Map<String, ?> originals) {
         super(config(), originals);
@@ -74,6 +76,7 @@ class HttpSourceConnectorConfig extends AbstractConfig {
         recordSorter = getConfiguredInstance(RECORD_SORTER, SourceRecordSorter.class);
         recordFilterFactory = getConfiguredInstance(RECORD_FILTER_FACTORY, SourceRecordFilterFactory.class);
         initialOffset = breakDownMap(getString(OFFSET_INITIAL));
+        nextPageOffset = getString(NEXT_PAGE_OFFSET);
     }
 
     public static ConfigDef config() {
@@ -84,6 +87,7 @@ class HttpSourceConnectorConfig extends AbstractConfig {
                 .define(RESPONSE_PARSER, CLASS, PolicyHttpResponseParser.class, HIGH, "Response Parser Class")
                 .define(RECORD_SORTER, CLASS, OrderDirectionSourceRecordSorter.class, LOW, "Record Sorter Class")
                 .define(RECORD_FILTER_FACTORY, CLASS, OffsetRecordFilterFactory.class, LOW, "Record Filter Factory Class")
-                .define(OFFSET_INITIAL, STRING, "", HIGH, "Starting offset");
+                .define(OFFSET_INITIAL, STRING, "", HIGH, "Starting offset")
+                .define(NEXT_PAGE_OFFSET, STRING, "", HIGH, "Next Page offset");
     }
 }

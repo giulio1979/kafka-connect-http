@@ -42,6 +42,8 @@ public class PolicyHttpResponseParser implements HttpResponseParser {
 
     private HttpResponsePolicy policy;
 
+    private Map<String, String> skipOffsets;
+
     public PolicyHttpResponseParser() {
         this(PolicyHttpResponseParserConfig::new);
     }
@@ -51,6 +53,12 @@ public class PolicyHttpResponseParser implements HttpResponseParser {
         PolicyHttpResponseParserConfig config = configFactory.apply(settings);
         delegate = config.getDelegateParser();
         policy = config.getPolicy();
+        skipOffsets = config.getSkipOffsets();
+    }
+
+    @Override
+    public Map<String, String> getOffsetReset() {
+        return skipOffsets;
     }
 
     @Override

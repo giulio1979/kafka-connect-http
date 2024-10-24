@@ -69,6 +69,13 @@ public class Offset {
         return ofNullable((String) properties.get(KEY_KEY));
     }
 
+    @SuppressWarnings("unchecked")
+    public void setValue(String key, Object value) {
+        if (key != null) {
+            ((Map<String, Object>) properties).put(key, value);
+        }
+    }
+
     public Optional<Instant> getTimestamp() {
         return ofNullable((String) properties.get(TIMESTAMP_KEY)).map(Instant::parse);
     }

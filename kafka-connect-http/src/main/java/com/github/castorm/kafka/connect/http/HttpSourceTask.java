@@ -29,6 +29,7 @@ import com.github.castorm.kafka.connect.http.record.spi.SourceRecordFilterFactor
 import com.github.castorm.kafka.connect.http.record.spi.SourceRecordSorter;
 import com.github.castorm.kafka.connect.http.request.spi.HttpRequestFactory;
 import com.github.castorm.kafka.connect.http.response.spi.HttpResponseParser;
+
 import com.github.castorm.kafka.connect.timer.TimerThrottler;
 import edu.emory.mathcs.backport.java.util.Collections;
 import lombok.Getter;
@@ -40,10 +41,15 @@ import org.apache.kafka.connect.source.SourceTask;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import com.github.castorm.kafka.connect.common.ConfigUtils;
+
+import static com.github.castorm.kafka.connect.common.ConfigUtils.breakDownMap;
 import static com.github.castorm.kafka.connect.common.VersionUtils.getVersion;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
@@ -68,6 +74,8 @@ public class HttpSourceTask extends SourceTask {
     private SourceRecordFilterFactory recordFilterFactory;
 
     private ConfirmationWindow<Map<String, ?>> confirmationWindow = new ConfirmationWindow<>(emptyList());
+
+    private String nextPageOffset;
 
     @Getter
     private Offset offset;
@@ -103,18 +111,40 @@ public class HttpSourceTask extends SourceTask {
     public List<SourceRecord> poll() throws InterruptedException {
 
         throttler.throttle(offset.getTimestamp().orElseGet(Instant::now));
+        offset.setValue(nextPageOffset, "");
 
-        HttpRequest request = requestFactory.createRequest(offset);
+        boolean hasNextPage = true;
 
-        HttpResponse response = execute(request);
+        List<SourceRecord> allRecords = new ArrayList<>();
+        while(hasNextPage) {
+            HttpRequest request = requestFactory.createRequest(offset);
 
-        List<SourceRecord> records = responseParser.parse(response);
+            log.info("Request for page {}", request.toString());
 
-        List<SourceRecord> unseenRecords = recordSorter.sort(records).stream()
+            HttpResponse response = execute(request);
+
+            List<SourceRecord> records = responseParser.parse(response);
+
+            if(!records.isEmpty()) {
+                allRecords.addAll(records);
+                String nextPage = (String) records.get(0).sourceOffset().get(nextPageOffset);
+                if(nextPage != null && !nextPage.trim().isEmpty()) {
+                    log.info("Request for next page {}", nextPage);
+                    offset.setValue(nextPageOffset, nextPage);
+                } else {
+                    hasNextPage = false;
+                }
+
+            } else {
+                hasNextPage = false;
+            }
+        }
+
+        List<SourceRecord> unseenRecords = recordSorter.sort(allRecords).stream()
                 .filter(recordFilterFactory.create(offset))
                 .collect(toList());
 
-        log.info("Request for offset {} yields {}/{} new records", offset.toMap(), unseenRecords.size(), records.size());
+        log.info("Request for offset {} yields {}/{} new records", offset.toMap(), unseenRecords.size(), allRecords.size());
 
         confirmationWindow = new ConfirmationWindow<>(extractOffsets(unseenRecords));
 
