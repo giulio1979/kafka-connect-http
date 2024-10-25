@@ -27,6 +27,7 @@ import com.github.castorm.kafka.connect.http.response.jackson.model.JacksonRecor
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.common.Configurable;
 
+import java.util.Date;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -75,9 +76,13 @@ public class JacksonResponseRecordParser implements Configurable {
     private Map<String, Object> getResponseOffset(JsonNode node) {
         if(responseOffsetPointers.isEmpty())
             return emptyMap();
-        else
-            return responseOffsetPointers.entrySet().stream()
-                .collect(toMap(Map.Entry::getKey, entry -> serializer.getObjectAt(node, entry.getValue()).asText()));
+        else {
+            Map<String, Object> t = responseOffsetPointers.entrySet().stream()
+                    .collect(toMap(Map.Entry::getKey, entry -> serializer.getObjectAt(node, entry.getValue()).asText()));
+            t.put("last_poll_timestamp", "" + new Date().getTime());
+            return t;
+        }
+
     }
 
     private JacksonRecord toJacksonRecord(JsonNode jsonRecord, Map<String, Object> responseOffset) {
