@@ -49,6 +49,10 @@ public class ConfigurableHttpAuthenticatorConfig extends AbstractConfig {
                 BasicHttpAuthenticator auth = new BasicHttpAuthenticator();
                 auth.configure(originals);
                 return auth;
+            case TOKEN_ENDPOINT:
+                TokenEndpointAuthenticator tokenEndpointAuth = new TokenEndpointAuthenticator();
+                tokenEndpointAuth.configure(originals);
+                return tokenEndpointAuth;
             default:
                 return new NoneHttpAuthenticator();
         }

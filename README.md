@@ -167,6 +167,29 @@ The first thing our connector will need to do is creating a `HttpRequest`.
 > *   Type: `String`
 > *   Default: `""`
 
+### Pagination
+
+>
+> #### `http.offset.nextpage`
+> which response offset will hold next page parameter to trigger subsequent calls
+> *   Example: `endCursor`
+> *   Type: `String`
+> *   Default: `""`
+>
+> #### `http.response.offset.pointer`
+> Which offsets to pick from root response
+> *   Example: `hasNextPage=/pagination/hasNextPage, endCursor=/pagination/endCursor`
+> *   Type: `String`
+> *   Default: `""`
+>
+> #### `http.response.skip.policy.offsets`
+> Which offsets to pick from root response
+> *   Example: `hasNextPage=false`
+> *   Type: `String`
+> *   Default: `""`
+>
+> 
+
 #### Creating a `HttpRequest` with `TemplateHttpRequestFactory`
 This `HttpRequestFactory` is based on template resolution.
 
@@ -320,7 +343,7 @@ Allows selecting the authentication type via configuration property
 
 > ##### `http.auth.type`
 > Type of authentication
-> *   Type: `Enum { None, Basic }`
+> *   Type: `Enum { None, Basic, Token }`
 > *   Default: `None`
 
 #### Authenticating with `BasicHttpAuthenticator`
@@ -331,6 +354,21 @@ Allows selecting the authentication type via configuration property
 > *   Default: `""`
 >
 > ##### `http.auth.password`
+> *   Type: `String`
+> *   Default: `"""`
+
+#### Authenticating with `TokenAuthenticator`
+Allows selecting the Bearer token authentication 
+
+> ##### `http.auth.url`
+> *   Type: `String`
+> *   Default: `""`
+>
+> ##### `http.auth.body`
+> *   Type: `String`
+> *   Default: `"""`
+>
+> ##### `http.auth.tokenkeypath`
 > *   Type: `String`
 > *   Default: `"""`
 

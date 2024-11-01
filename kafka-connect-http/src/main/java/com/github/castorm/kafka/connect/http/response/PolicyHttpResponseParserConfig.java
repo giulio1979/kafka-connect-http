@@ -38,25 +38,20 @@ public class PolicyHttpResponseParserConfig extends AbstractConfig {
 
     private static final String PARSER_DELEGATE = "http.response.policy.parser";
     private static final String POLICY = "http.response.policy";
-    private static final String SKIP_OFFSET_POLICY = "http.response.skip.policy.offsets";
 
     private final HttpResponseParser delegateParser;
 
     private final HttpResponsePolicy policy;
 
-    private Map<String, String> skipOffsets;
-
     public PolicyHttpResponseParserConfig(Map<String, ?> originals) {
         super(config(), originals);
         delegateParser = getConfiguredInstance(PARSER_DELEGATE, HttpResponseParser.class);
         policy = getConfiguredInstance(POLICY, HttpResponsePolicy.class);
-        skipOffsets = breakDownMap(getString(SKIP_OFFSET_POLICY));
     }
 
     public static ConfigDef config() {
         return new ConfigDef()
                 .define(PARSER_DELEGATE, CLASS, KvHttpResponseParser.class, HIGH, "Response Parser Delegate Class")
-                .define(POLICY, CLASS, StatusCodeHttpResponsePolicy.class, HIGH, "Response Policy Class")
-                .define(SKIP_OFFSET_POLICY, STRING, "", HIGH, "Reset Offsets");
+                .define(POLICY, CLASS, StatusCodeHttpResponsePolicy.class, HIGH, "Response Policy Class");
     }
 }

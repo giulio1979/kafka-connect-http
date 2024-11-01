@@ -33,7 +33,7 @@ public interface HttpResponseParser extends Configurable {
 
     List<SourceRecord> parse(HttpResponse response);
 
-    public default Map<String, String> getOffsetReset() {
+    default Map<String, String> getOffsetReset() {
         return Collections.emptyMap();
     }
 
