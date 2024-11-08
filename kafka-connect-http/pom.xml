@@ -27,7 +27,6 @@
             <artifactId>logback-classic</artifactId>
             <scope>provided</scope>
         </dependency>
-
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
@@ -89,81 +88,20 @@
             <build>
                 <plugins>
                     <plugin>
-                        <groupId>io.confluent</groupId>
-                        <version>0.12.0</version>
-                        <artifactId>kafka-connect-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <phase>prepare-package</phase>
-                                <goals>
-                                    <goal>kafka-connect</goal>
-                                </goals>
-                                <configuration>
-                                    <title>${project.name}</title>
-                                    <name>${project.artifactId}</name>
-                                    <sourceUrl>${project.parent.url}</sourceUrl>
-                                    <documentationUrl>${project.parent.url}</documentationUrl>
-                                    <description>${project.parent.description}</description>
-                                    <version>${project.version}</version>
-                                    <supportProviderName>${project.parent.organization.name}</supportProviderName>
-                                    <supportSummary>Cástor Rodríguez supports the HTTP plugin alongside other contributors of
-                                        this open source project.
-                                    </supportSummary>
-                                    <supportUrl>${project.parent.issueManagement.url}</supportUrl>
-
-                                    <ownerUsername>castorm</ownerUsername>
-                                    <ownerType>user</ownerType>
-                                    <ownerName>Cástor Rodríguez</ownerName>
-                                    <ownerUrl>https://castorm.es</ownerUrl>
-
-                                    <componentTypes>
-                                        <componentType>source</componentType>
-                                    </componentTypes>
-
-                                    <tags>
-                                        <tag>http</tag>
-                                        <tag>rest</tag>
-                                        <tag>api</tag>
-                                        <tag>json</tag>
-                                        <tag>cdc</tag>
-                                        <tag>change-data-capture</tag>
-                                    </tags>
-
-                                    <requirements>
-                                        <requirement>HTTP resource to perform requests against</requirement>
-                                        <requirement>To perform change-data-capture with effectively-once delivery
-                                            guarantees, the HTTP resource should allow ordering and filtering by one or
-                                            more monotonically increasing properties such as sequence numbers or
-                                            timestamps
-                                        </requirement>
-                                    </requirements>
-
-                                    <deliveryGuarantee>
-                                        <deliveryGuarantee>exactlyOnce</deliveryGuarantee>
-                                    </deliveryGuarantee>
-
-                                    <confluentControlCenterIntegration>false</confluentControlCenterIntegration>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>license-maven-plugin</artifactId>
-                        <version>2.0.0</version>
+                        <artifactId>maven-assembly-plugin</artifactId>
                         <configuration>
-                            <licenseName>apache_v2</licenseName>
-                            <excludes>
-                                <exclude>**/*.json</exclude>
-                            </excludes>
+                            <descriptors>
+                                <descriptor>src/assembly/package.xml</descriptor>
+                            </descriptors>
+                            <attach>false</attach>
                         </configuration>
                         <executions>
                             <execution>
-                                <id>first</id>
+                                <id>make-assembly</id>
+                                <phase>package</phase>
                                 <goals>
-                                    <goal>update-file-header</goal>
+                                    <goal>single</goal>
                                 </goals>
-                                <phase>process-sources</phase>
                             </execution>
                         </executions>
                     </plugin>
