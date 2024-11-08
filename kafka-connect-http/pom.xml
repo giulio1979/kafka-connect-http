@@ -17,6 +17,7 @@
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
         </dependency>
+
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-api</artifactId>
@@ -92,6 +93,7 @@
                         <configuration>
                             <descriptors>
                                 <descriptor>src/assembly/package.xml</descriptor>
+                                <descriptor>src/assembly/plugin.xml</descriptor>
                             </descriptors>
                             <attach>false</attach>
                         </configuration>

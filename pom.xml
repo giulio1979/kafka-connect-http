@@ -18,6 +18,20 @@
         <url>http://www.castorm.es</url>
     </organization>
 
+    <profiles>
+        <profile>
+            <id>package</id>
+            <modules>
+                <module>kafka-connect-http</module>
+                <module>kafka-connect-http-infra</module>
+                <!-- Do not list the kafka-connect-http-infra module here -->
+            </modules>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+    </profiles>
+
     <developers>
         <developer>
             <name>Cástor Rodríguez</name>
@@ -37,23 +51,6 @@
         <system>github.com</system>
         <url>https://github.com/castorm/kafka-connect-http/issues</url>
     </issueManagement>
-
-    <scm>
-        <url>https://github.com/castorm/kafka-connect-http</url>
-        <connection>scm:git:https://github.com/castorm/kafka-connect-http.git</connection>
-        <tag>v0.3.5</tag>
-    </scm>
-
-    <distributionManagement>
-        <site>
-            <id>wiki</id>
-            <url>https://github.com/castorm/kafka-connect-http/wiki</url>
-        </site>
-        <repository>
-            <id>github</id>
-            <url>https://maven.pkg.github.com/castorm/kafka-connect-http</url>
-        </repository>
-    </distributionManagement>
 
     <modules>
         <module>kafka-connect-http</module>
