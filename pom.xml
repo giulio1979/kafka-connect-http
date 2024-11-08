@@ -18,6 +18,14 @@
         <url>http://www.castorm.es</url>
     </organization>
 
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/giulio1979/kafka-connect-http</url>
+        </repository>
+    </distributionManagement>
+
     <profiles>
         <profile>
             <id>package</id>
