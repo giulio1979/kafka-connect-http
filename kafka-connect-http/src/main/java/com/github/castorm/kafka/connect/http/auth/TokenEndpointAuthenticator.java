@@ -35,13 +35,19 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
+import static com.github.castorm.kafka.connect.common.ConfigUtils.breakDownHeaders;
+import static com.github.castorm.kafka.connect.common.ConfigUtils.breakDownMap;
+
 public class TokenEndpointAuthenticator implements HttpAuthenticator {
     private final Function<Map<String, ?>, TokenEndpointAuthenticatorConfig> configFactory;
     private TokenEndpointAuthenticatorConfig config;
+    private String cachedToken = null;
+    private Instant tokenExpiry = Instant.EPOCH;
 
     public TokenEndpointAuthenticator() {
         this(TokenEndpointAuthenticatorConfig::new);
@@ -56,8 +62,25 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
         this.config = configFactory.apply(configs);
     }
 
+
     @Override
     public Optional<String> getAuthorizationHeader() {
+        if (isTokenExpired()) {
+            cachedToken = null;
+            try {
+                cachedToken = fetchData();
+                tokenExpiry = Instant.now().plusSeconds(config.getTokenExpirySeconds());
+            } catch (Exception e) {
+                throw new RetriableException("Error: " + e.getMessage(), e);
+            }
+            if (cachedToken == null || cachedToken.isEmpty()) {
+                throw new RetriableException("Error: Access token is empty.");
+            }
+        }
+        return Optional.of("Bearer " + cachedToken);
+    }
+
+    public String fetchData() {
         String credentialsBody = config.getAuthBody().value();
         RequestBody requestBody = RequestBody.create(credentialsBody,
                 MediaType.parse("application/json; charset=utf-8"));
@@ -76,13 +99,22 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
             throw new RetriableException("Error: No access token found at " + config.getTokenKeyPath());
         }
 
-        return Optional.of("Bearer " + accessToken);
+        return accessToken;
+    }
+
+    private boolean isTokenExpired() {
+        return Instant.now().isAfter(tokenExpiry) || cachedToken == null || cachedToken.isEmpty();
     }
 
     private String execute(RequestBody requestBody) {
         OkHttpClient httpClient = new OkHttpClient();
         try {
-            Request request = new Request.Builder().url(config.getAuthUrl()).post(requestBody).build();
+            okhttp3.Headers headers = okhttp3.Headers.of(breakDownMap(config.getHeaders()));
+
+            Request request = new Request.Builder()
+                    .url(config.getAuthUrl())
+                    .headers(headers)
+                    .post(requestBody).build();
             Response response = httpClient.newCall(request).execute();
             return response.body().string();
         } catch (IOException e) {
