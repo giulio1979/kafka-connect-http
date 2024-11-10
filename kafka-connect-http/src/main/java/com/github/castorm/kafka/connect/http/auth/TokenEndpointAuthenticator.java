@@ -96,7 +96,7 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
         }
 
         if (accessToken.isBlank()) {
-            throw new RetriableException("Error: No access token found at " + config.getTokenKeyPath());
+            throw new RetriableException("Error: No access token found at " + config.getTokenKeyPath() + " Response was:" + response);
         }
 
         return accessToken;
@@ -115,6 +115,7 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
                     .url(config.getAuthUrl())
                     .headers(headers)
                     .post(requestBody).build();
+
             Response response = httpClient.newCall(request).execute();
             return response.body().string();
         } catch (IOException e) {
