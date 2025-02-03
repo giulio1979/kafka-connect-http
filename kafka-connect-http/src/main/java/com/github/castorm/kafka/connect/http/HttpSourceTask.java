@@ -138,6 +138,7 @@ public class HttpSourceTask extends SourceTask {
             } else {
                 hasNextPage = false;
             }
+            Thread.sleep(200);
         }
 
         List<SourceRecord> unseenRecords = recordSorter.sort(allRecords).stream()

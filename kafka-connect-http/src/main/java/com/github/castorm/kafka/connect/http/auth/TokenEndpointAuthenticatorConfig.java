@@ -35,6 +35,7 @@ import static org.apache.kafka.common.config.ConfigDef.Type.STRING;
 @Getter
 public class TokenEndpointAuthenticatorConfig extends AbstractConfig {
     private static final String AUTH_URL = "http.auth.url";
+    private static final String AUTH_METHOD = "http.auth.method";
     private static final String AUTH_BODY = "http.auth.body";
     private static final String TOKEN_KEY_PATH = "http.auth.tokenkeypath";
     private static final String HEADERS = "http.token.request.headers";
@@ -45,12 +46,14 @@ public class TokenEndpointAuthenticatorConfig extends AbstractConfig {
     private final String tokenKeyPath;
     private final String headers;
     private final Integer tokenExpirySeconds;
+    private final String authMethod;
 
     public TokenEndpointAuthenticatorConfig(Map<?, ?> originals) {
         super(config(), originals);
         authUrl = getString(AUTH_URL);
         authBody = getPassword(AUTH_BODY);
         tokenKeyPath = getString(TOKEN_KEY_PATH);
+        authMethod = getString(AUTH_METHOD);
         headers = getString(HEADERS);
         tokenExpirySeconds = getInt(TOKEN_EXPIRY);
     }
@@ -59,6 +62,7 @@ public class TokenEndpointAuthenticatorConfig extends AbstractConfig {
         return new ConfigDef().define(AUTH_BODY, ConfigDef.Type.PASSWORD, "", HIGH, "Auth payload JSON")
                 .define(TOKEN_KEY_PATH, STRING, "access_token", HIGH, "Auth request response token key")
                 .define(AUTH_URL, STRING, "", HIGH, "Auth endpoint")
+                .define(AUTH_METHOD, STRING, "POST", HIGH, "Auth Method")
                 .define(HEADERS, STRING, "", MEDIUM, "HTTP Token Headers Template")
                 .define(TOKEN_EXPIRY, INT, 60 * 59, MEDIUM, "HTTP Token Expiry time");
     }

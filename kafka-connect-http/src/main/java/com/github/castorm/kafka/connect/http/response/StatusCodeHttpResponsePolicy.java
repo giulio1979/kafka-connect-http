@@ -60,6 +60,7 @@ public class StatusCodeHttpResponsePolicy implements HttpResponsePolicy {
             return PROCESS;
         } else if (skipCodes.contains(response.getCode())) {
             log.warn("Unexpected HttpResponse status code: {}, continuing with no records", response.getCode());
+            log.warn("Unexpected HttpResponse body: {}", new String(response.getBody()));
             return SKIP;
         } else {
             return FAIL;

@@ -24,15 +24,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.castorm.kafka.connect.http.auth.spi.HttpAuthenticator;
 
+import okhttp3.*;
+import okhttp3.logging.HttpLoggingInterceptor;
 import org.apache.kafka.connect.errors.RetriableException;
 
 import org.apache.kafka.connect.errors.ConnectException;
-
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -42,6 +38,8 @@ import java.util.function.Function;
 
 import static com.github.castorm.kafka.connect.common.ConfigUtils.breakDownHeaders;
 import static com.github.castorm.kafka.connect.common.ConfigUtils.breakDownMap;
+import static okhttp3.logging.HttpLoggingInterceptor.Level.BODY;
+import static okhttp3.logging.HttpLoggingInterceptor.Logger.DEFAULT;
 
 public class TokenEndpointAuthenticator implements HttpAuthenticator {
     private final Function<Map<String, ?>, TokenEndpointAuthenticatorConfig> configFactory;
@@ -82,8 +80,8 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
 
     public String fetchData() {
         String credentialsBody = config.getAuthBody().value();
-        RequestBody requestBody = RequestBody.create(credentialsBody,
-                MediaType.parse("application/json; charset=utf-8"));
+        RequestBody requestBody = FormBody.create(credentialsBody.getBytes());
+
         String response = execute(requestBody);
 
         ObjectMapper objectMapper = new ObjectMapper();
@@ -108,15 +106,25 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
 
     private String execute(RequestBody requestBody) {
         OkHttpClient httpClient = new OkHttpClient();
-        try {
-            okhttp3.Headers headers = okhttp3.Headers.of(breakDownMap(config.getHeaders()));
 
-            Request request = new Request.Builder()
-                    .url(config.getAuthUrl())
-                    .headers(headers)
-                    .post(requestBody).build();
+        try {
+            Map<String, String> m = breakDownMap(config.getHeaders());
+            okhttp3.Headers headers = okhttp3.Headers.of(m);
+
+            Request request = null;
+            if(config.getAuthMethod().toString().equalsIgnoreCase("POST"))
+                request = new Request.Builder()
+                        .url(config.getAuthUrl())
+                        .headers(headers)
+                        .post(requestBody).build();
+            else
+                request = new Request.Builder()
+                        .url(config.getAuthUrl())
+                        .headers(headers)
+                        .get().build();
 
             Response response = httpClient.newCall(request).execute();
+
             return response.body().string();
         } catch (IOException e) {
             throw new RetriableException("Error: " + e.getMessage(), e);
@@ -124,5 +132,4 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
             throw new ConnectException("Error: " + e.getMessage(), e);
         }
     }
-
 }
