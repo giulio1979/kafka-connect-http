@@ -34,6 +34,13 @@ import static java.util.Optional.ofNullable;
 @EqualsAndHashCode
 public class Offset {
 
+    @Override
+    public String toString() {
+        return "Offset{" +
+                "properties=" + properties +
+                '}';
+    }
+
     private static final String KEY_KEY = "key";
 
     private static final String TIMESTAMP_KEY = "timestamp";
@@ -79,4 +86,6 @@ public class Offset {
     public Optional<Instant> getTimestamp() {
         return ofNullable((String) properties.get(TIMESTAMP_KEY)).map(Instant::parse);
     }
+
+
 }

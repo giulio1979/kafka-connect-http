@@ -56,6 +56,7 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     private static final String RECORD_FILTER_FACTORY = "http.record.filter.factory";
     private static final String OFFSET_INITIAL = "http.offset.initial";
     private static final String NEXT_PAGE_OFFSET = "http.offset.nextpage";
+    private static final String HAS_NEXT_PAGE = "http.offset.hasnextpage";
 
     private final TimerThrottler throttler;
     private final HttpRequestFactory requestFactory;
@@ -64,7 +65,8 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     private final SourceRecordFilterFactory recordFilterFactory;
     private final SourceRecordSorter recordSorter;
     private final Map<String, String> initialOffset;
-    private String nextPageOffset;
+    private String nextPageOffsetField;
+    private String hasNextPageField;
 
     HttpSourceConnectorConfig(Map<String, ?> originals) {
         super(config(), originals);
@@ -76,7 +78,8 @@ class HttpSourceConnectorConfig extends AbstractConfig {
         recordSorter = getConfiguredInstance(RECORD_SORTER, SourceRecordSorter.class);
         recordFilterFactory = getConfiguredInstance(RECORD_FILTER_FACTORY, SourceRecordFilterFactory.class);
         initialOffset = breakDownMap(getString(OFFSET_INITIAL));
-        nextPageOffset = getString(NEXT_PAGE_OFFSET);
+        nextPageOffsetField = getString(NEXT_PAGE_OFFSET);
+        hasNextPageField = getString(HAS_NEXT_PAGE);
     }
 
     public static ConfigDef config() {
@@ -88,6 +91,7 @@ class HttpSourceConnectorConfig extends AbstractConfig {
                 .define(RECORD_SORTER, CLASS, OrderDirectionSourceRecordSorter.class, LOW, "Record Sorter Class")
                 .define(RECORD_FILTER_FACTORY, CLASS, OffsetRecordFilterFactory.class, LOW, "Record Filter Factory Class")
                 .define(OFFSET_INITIAL, STRING, "", HIGH, "Starting offset")
-                .define(NEXT_PAGE_OFFSET, STRING, "", HIGH, "Next Page offset");
+                .define(NEXT_PAGE_OFFSET, STRING, "", HIGH, "Next Page offset")
+                .define(HAS_NEXT_PAGE, STRING, "", HIGH, "Has Next Page");
     }
 }

@@ -67,6 +67,7 @@ import static okhttp3.RequestBody.create;
 import static okhttp3.logging.HttpLoggingInterceptor.Level.BASIC;
 import static okhttp3.logging.HttpLoggingInterceptor.Level.BODY;
 import static okhttp3.logging.HttpLoggingInterceptor.Level.NONE;
+import static okhttp3.logging.HttpLoggingInterceptor.Level.HEADERS;
 import static org.apache.commons.lang.StringUtils.isEmpty;
 
 @Slf4j
@@ -109,9 +110,9 @@ public class OkHttpClient implements HttpClient {
         if (log.isTraceEnabled()) {
             return new HttpLoggingInterceptor(log::trace).setLevel(BODY);
         } else if (log.isDebugEnabled()) {
-            return new HttpLoggingInterceptor(log::debug).setLevel(BASIC);
+            return new HttpLoggingInterceptor(log::debug).setLevel(HEADERS);
         } else {
-            return new HttpLoggingInterceptor(log::info).setLevel(NONE);
+            return new HttpLoggingInterceptor(log::info).setLevel(BASIC);
         }
     }
 

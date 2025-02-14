@@ -49,6 +49,10 @@ public class ConfigurableHttpAuthenticatorConfig extends AbstractConfig {
                 BasicHttpAuthenticator auth = new BasicHttpAuthenticator();
                 auth.configure(originals);
                 return auth;
+            case BEARER:
+                BearerAuthenticator bauth = new BearerAuthenticator();
+                bauth.configure(originals);
+                return bauth;
             case TOKEN_ENDPOINT:
                 TokenEndpointAuthenticator tokenEndpointAuth = new TokenEndpointAuthenticator();
                 tokenEndpointAuth.configure(originals);

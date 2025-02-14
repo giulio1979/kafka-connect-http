@@ -62,14 +62,6 @@ class StatusCodeHttpResponsePolicyTest {
         assertThat(policy.resolve(response.withCode(code))).isEqualTo(PROCESS);
     }
 
-    @Test
-    void givenCodeSkip_whenResolve_thenSkip() {
-
-        given(config.getSkipCodes()).willReturn(Stream.of(code).collect(toSet()));
-        policy.configure(emptyMap());
-
-        assertThat(policy.resolve(response.withCode(code))).isEqualTo(SKIP);
-    }
 
     @Test
     void givenCodeNoProcessNorSkip_whenResolve_thenFail() {

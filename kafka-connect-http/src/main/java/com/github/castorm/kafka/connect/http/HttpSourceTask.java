@@ -42,14 +42,10 @@ import org.apache.kafka.connect.source.SourceTask;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
-import com.github.castorm.kafka.connect.common.ConfigUtils;
-
-import static com.github.castorm.kafka.connect.common.ConfigUtils.breakDownMap;
 import static com.github.castorm.kafka.connect.common.VersionUtils.getVersion;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
@@ -75,7 +71,8 @@ public class HttpSourceTask extends SourceTask {
 
     private ConfirmationWindow<Map<String, ?>> confirmationWindow = new ConfirmationWindow<>(emptyList());
 
-    private String nextPageOffset;
+    private String nextPageOffsetField;
+    private String hasNextPageField;
 
     @Getter
     private Offset offset;
@@ -100,6 +97,8 @@ public class HttpSourceTask extends SourceTask {
         recordSorter = config.getRecordSorter();
         recordFilterFactory = config.getRecordFilterFactory();
         offset = loadOffset(config.getInitialOffset());
+        nextPageOffsetField = config.getNextPageOffsetField();
+        hasNextPageField  = config.getHasNextPageField();
     }
 
     private Offset loadOffset(Map<String, String> initialOffset) {
@@ -111,15 +110,18 @@ public class HttpSourceTask extends SourceTask {
     public List<SourceRecord> poll() throws InterruptedException {
 
         throttler.throttle(offset.getTimestamp().orElseGet(Instant::now));
-        offset.setValue(nextPageOffset, "");
-
-        boolean hasNextPage = true;
+        offset.setValue(nextPageOffsetField, "");
+        offset.setValue(hasNextPageField, "");
+        String hasNextPageFlag = "true";
+        String nextPageValue = "";
 
         List<SourceRecord> allRecords = new ArrayList<>();
-        while(hasNextPage) {
+        while(hasNextPageFlag.matches("true")) {
             HttpRequest request = requestFactory.createRequest(offset);
 
+            log.info("Request for offset {}", offset.toString());
             log.info("Request for page {}", request.toString());
+            log.info("Request for initial page {} hasNextPageFlag {}", nextPageValue, hasNextPageFlag);
 
             HttpResponse response = execute(request);
 
@@ -127,18 +129,21 @@ public class HttpSourceTask extends SourceTask {
 
             if(!records.isEmpty()) {
                 allRecords.addAll(records);
-                String nextPage = (String) records.get(0).sourceOffset().get(nextPageOffset);
-                if(nextPage != null && !nextPage.trim().isEmpty()) {
-                    log.info("Request for next page {}", nextPage);
-                    offset.setValue(nextPageOffset, nextPage);
+                nextPageValue = (String) records.get(0).sourceOffset().get(nextPageOffsetField);
+                hasNextPageFlag = (String) records.get(0).sourceOffset().get(hasNextPageField);
+
+                if(hasNextPageFlag != null && hasNextPageFlag.matches("true") && !nextPageValue.trim().isEmpty()) {
+                    log.info("Request for next page {}", nextPageValue);
+                    offset.setValue(nextPageOffsetField, nextPageValue);
+                    offset.setValue(hasNextPageField, hasNextPageFlag);
                 } else {
-                    hasNextPage = false;
+                    hasNextPageFlag = "";
                 }
 
             } else {
-                hasNextPage = false;
+                hasNextPageFlag = "";
             }
-            Thread.sleep(200);
+            Thread.sleep(1000);
         }
 
         List<SourceRecord> unseenRecords = recordSorter.sort(allRecords).stream()
