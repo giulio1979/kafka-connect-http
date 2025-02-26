@@ -145,6 +145,40 @@ class HttpSourceTaskTest {
     }
 
     @Test
+    void givenTaskAutotimer() throws IOException, InterruptedException {
+
+        Map<String, Object> offsetMap = new HashMap<>(ImmutableMap.of("AUTOTIMESTAMP", 1672531200000L));
+        Map<String, Object> offsetInitialMap = new HashMap<>(ImmutableMap.of("AUTOTIMESTAMP", 1672617599000L));
+        Offset offset = Offset.of(offsetMap);
+        HttpRequest request = HttpRequest.builder().build();
+        HttpResponse response = HttpResponse.builder().build();
+
+        givenTaskConfiguration();
+        given(config.getAutoDateInitialOffset()).willReturn("2023-01-01T00:00:00Z");
+        given(config.getAutoDateIncrement()).willReturn("86400000");
+        given(config.getAutoDateBackoff()).willReturn("1000");
+
+        task.initialize(getContext(offsetMap));
+        task.start(emptyMap());
+
+        given(requestFactory.createRequest(offset)).willReturn(request);
+        given(client.execute(request)).willReturn(response);
+        given(responseParser.parse(response)).willReturn(asList(record(offsetMap)));
+        given(recordSorter.sort(asList(record(offsetMap))))
+                .willReturn(asList(record(offsetMap(1)), record(offsetMap(2)), record(offsetMap(3))));
+        given(recordFilterFactory.create(offset)).willReturn(__ -> true);
+
+        task.initialize(getContext(emptyMap()));
+
+        task.start(emptyMap());
+
+        task.poll();
+
+        System.out.println(task.getOffset());
+        assertThat(task.getOffset()).isEqualTo(Offset.of(offsetInitialMap));
+    }
+
+    @Test
     void givenTaskInitialized_whenStart_thenGetPollIntervalMillis() {
 
         givenTaskConfiguration();

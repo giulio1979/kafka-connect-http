@@ -34,6 +34,11 @@ import com.github.castorm.kafka.connect.timer.TimerThrottler;
 import edu.emory.mathcs.backport.java.util.Collections;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -42,6 +47,7 @@ import org.apache.kafka.connect.source.SourceTask;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -55,6 +61,7 @@ import static java.util.stream.Collectors.toList;
 @Slf4j
 public class HttpSourceTask extends SourceTask {
 
+    public static final String AUTOTIMESTAMP = "AUTOTIMESTAMP";
     private final Function<Map<String, String>, HttpSourceConnectorConfig> configFactory;
 
     private TimerThrottler throttler;
@@ -73,6 +80,10 @@ public class HttpSourceTask extends SourceTask {
 
     private String nextPageOffsetField;
     private String hasNextPageField;
+
+    private String autoDateInitialOffset;
+    private String sautoDateIncrement;
+    private String sautoDateBackoff;
 
     @Getter
     private Offset offset;
@@ -99,6 +110,10 @@ public class HttpSourceTask extends SourceTask {
         offset = loadOffset(config.getInitialOffset());
         nextPageOffsetField = config.getNextPageOffsetField();
         hasNextPageField  = config.getHasNextPageField();
+
+        autoDateInitialOffset = config.getAutoDateInitialOffset();
+        sautoDateIncrement = config.getAutoDateIncrement();
+        sautoDateBackoff = config.getAutoDateBackoff();
     }
 
     private Offset loadOffset(Map<String, String> initialOffset) {
@@ -110,12 +125,34 @@ public class HttpSourceTask extends SourceTask {
     public List<SourceRecord> poll() throws InterruptedException {
 
         throttler.throttle(offset.getTimestamp().orElseGet(Instant::now));
+        List<SourceRecord> allRecords = new ArrayList<>();
+        DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
+        long autoOffset = 0;
+        long autoDateIncrement = 0;
+        long autoDateBackoff = 0;
+
+        if( autoDateInitialOffset != null && !autoDateInitialOffset.isEmpty()) {
+            try {
+                LocalDateTime dateTime = LocalDateTime.parse(autoDateInitialOffset, formatter);
+                Instant timestamp = dateTime.atZone(ZoneId.of("UTC")).toInstant();
+                autoDateIncrement = Long.parseLong(sautoDateIncrement);
+                autoDateBackoff = Long.parseLong(sautoDateBackoff);
+                autoOffset = timestamp.toEpochMilli();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            if (offset.toMap().containsKey(AUTOTIMESTAMP)) {
+                autoOffset = (Long) offset.toMap().get(AUTOTIMESTAMP);
+            }
+
+            offset.setValue(AUTOTIMESTAMP, autoOffset);
+        }
         offset.setValue(nextPageOffsetField, "");
         offset.setValue(hasNextPageField, "");
         String hasNextPageFlag = "true";
         String nextPageValue = "";
 
-        List<SourceRecord> allRecords = new ArrayList<>();
         while(hasNextPageFlag.matches("true")) {
             HttpRequest request = requestFactory.createRequest(offset);
 
@@ -139,16 +176,27 @@ public class HttpSourceTask extends SourceTask {
                 } else {
                     hasNextPageFlag = "";
                 }
-
             } else {
                 hasNextPageFlag = "";
             }
-            Thread.sleep(1000);
+            Thread.sleep(300);
         }
 
         List<SourceRecord> unseenRecords = recordSorter.sort(allRecords).stream()
                 .filter(recordFilterFactory.create(offset))
                 .collect(toList());
+
+        if(autoDateInitialOffset != null && !autoDateInitialOffset.isEmpty()) {
+            autoOffset = autoOffset + autoDateIncrement - autoDateBackoff;
+            if (autoOffset > new Date().getTime()) {
+                autoOffset = new Date().getTime() - autoDateBackoff;
+            }
+            for(SourceRecord s: allRecords) {
+                ((Map<String,Long>)s.sourceOffset()).put(AUTOTIMESTAMP, Long.valueOf(autoOffset));
+            }
+            offset.setValue(AUTOTIMESTAMP, autoOffset);
+            log.info("AutoOffset Patch {}", offset.toString());
+        }
 
         log.info("Request for offset {} yields {}/{} new records", offset.toMap(), unseenRecords.size(), allRecords.size());
 

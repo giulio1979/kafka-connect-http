@@ -57,6 +57,10 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     private static final String OFFSET_INITIAL = "http.offset.initial";
     private static final String NEXT_PAGE_OFFSET = "http.offset.nextpage";
     private static final String HAS_NEXT_PAGE = "http.offset.hasnextpage";
+    public static final String AUTODATE_INITIAL_OFFSET = "http.offset.date_initial_date";
+    public static final String AUTODATE_INCREMENT = "http.offset.date_increment";
+    public static final String AUTODATE_BACKOFF = "http.offset.date_backoff";
+
 
     private final TimerThrottler throttler;
     private final HttpRequestFactory requestFactory;
@@ -67,6 +71,9 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     private final Map<String, String> initialOffset;
     private String nextPageOffsetField;
     private String hasNextPageField;
+    private String autoDateInitialOffset;
+    private String autoDateIncrement;
+    private String autoDateBackoff;
 
     HttpSourceConnectorConfig(Map<String, ?> originals) {
         super(config(), originals);
@@ -80,6 +87,9 @@ class HttpSourceConnectorConfig extends AbstractConfig {
         initialOffset = breakDownMap(getString(OFFSET_INITIAL));
         nextPageOffsetField = getString(NEXT_PAGE_OFFSET);
         hasNextPageField = getString(HAS_NEXT_PAGE);
+        autoDateInitialOffset = getString(AUTODATE_INITIAL_OFFSET);
+        autoDateIncrement = getString(AUTODATE_INCREMENT);
+        autoDateBackoff = getString(AUTODATE_BACKOFF);
     }
 
     public static ConfigDef config() {
@@ -92,6 +102,9 @@ class HttpSourceConnectorConfig extends AbstractConfig {
                 .define(RECORD_FILTER_FACTORY, CLASS, OffsetRecordFilterFactory.class, LOW, "Record Filter Factory Class")
                 .define(OFFSET_INITIAL, STRING, "", HIGH, "Starting offset")
                 .define(NEXT_PAGE_OFFSET, STRING, "", HIGH, "Next Page offset")
-                .define(HAS_NEXT_PAGE, STRING, "", HIGH, "Has Next Page");
+                .define(HAS_NEXT_PAGE, STRING, "", HIGH, "Has Next Page")
+                .define(AUTODATE_INITIAL_OFFSET, STRING, "", HIGH, "Automatic Date Initial Offset")
+                .define(AUTODATE_INCREMENT, STRING, "", HIGH, "Automatic Date Increment")
+                .define(AUTODATE_BACKOFF, STRING, "", HIGH, "Automatic Date Backoff");
     }
 }
