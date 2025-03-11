@@ -130,6 +130,7 @@ public class HttpSourceTask extends SourceTask {
         long autoOffset = 0;
         long autoDateIncrement = 0;
         long autoDateBackoff = 0;
+        boolean pagingEnabled = nextPageOffsetField != null && !nextPageOffsetField.isEmpty() && hasNextPageField != null && !hasNextPageField.isEmpty();
 
         if( autoDateInitialOffset != null && !autoDateInitialOffset.isEmpty()) {
             try {
@@ -148,10 +149,14 @@ public class HttpSourceTask extends SourceTask {
 
             offset.setValue(AUTOTIMESTAMP, autoOffset);
         }
-        offset.setValue(nextPageOffsetField, "");
-        offset.setValue(hasNextPageField, "");
+
         String hasNextPageFlag = "true";
         String nextPageValue = "";
+
+        if(pagingEnabled){
+            offset.setValue(nextPageOffsetField, "");
+            offset.setValue(hasNextPageField, "");
+        }
 
         while(hasNextPageFlag.matches("true")) {
             HttpRequest request = requestFactory.createRequest(offset);
@@ -166,11 +171,9 @@ public class HttpSourceTask extends SourceTask {
 
             if(!records.isEmpty()) {
                 allRecords.addAll(records);
-                nextPageValue = (String) records.get(0).sourceOffset().get(nextPageOffsetField);
-                hasNextPageFlag = (String) records.get(0).sourceOffset().get(hasNextPageField);
-
-                if(hasNextPageFlag != null && hasNextPageFlag.matches("true") && !nextPageValue.trim().isEmpty()) {
-                    log.info("Request for next page {}", nextPageValue);
+                if(pagingEnabled){
+                    nextPageValue = (String) records.get(0).sourceOffset().get(nextPageOffsetField);
+                    hasNextPageFlag = (String) records.get(0).sourceOffset().get(hasNextPageField);                
                     offset.setValue(nextPageOffsetField, nextPageValue);
                     offset.setValue(hasNextPageField, hasNextPageFlag);
                 } else {

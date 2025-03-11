@@ -89,6 +89,8 @@ public class OkHttpClient implements HttpClient {
                 .connectTimeout(config.getConnectionTimeoutMillis(), MILLISECONDS)
                 .readTimeout(config.getReadTimeoutMillis(), MILLISECONDS)
                 .retryOnConnectionFailure(true)
+                .followRedirects(false)
+                .followSslRedirects(false)
                 .addInterceptor(createLoggingInterceptor())
                 .addInterceptor(chain -> chain.proceed(authorize(chain.request())))
                 .authenticator((route, response) -> authorize(response.request()))
