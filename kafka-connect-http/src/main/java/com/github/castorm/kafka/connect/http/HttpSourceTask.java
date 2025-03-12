@@ -45,6 +45,7 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
 
 import java.io.IOException;
+import java.text.DateFormat;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
@@ -121,6 +122,7 @@ public class HttpSourceTask extends SourceTask {
         return Offset.of(!restoredOffset.isEmpty() ? restoredOffset : initialOffset);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public List<SourceRecord> poll() throws InterruptedException {
 
@@ -161,9 +163,9 @@ public class HttpSourceTask extends SourceTask {
         while(hasNextPageFlag.matches("true")) {
             HttpRequest request = requestFactory.createRequest(offset);
 
-            log.info("Request for offset {}", offset.toString());
-            log.info("Request for page {}", request.toString());
-            log.info("Request for initial page {} hasNextPageFlag {}", nextPageValue, hasNextPageFlag);
+            log.info("Offset: {}", offset.toString());
+            log.info("Request: {}", request.toString());
+            log.info("Config: autoOffset = {} nextPageOffsetField = {} nextPageValue = {} hasNextPageField = {} hasNextPageFlag = {}", DateFormat.getDateInstance().format(new Date(autoOffset)), nextPageOffsetField, nextPageValue, hasNextPageField, hasNextPageFlag);
 
             HttpResponse response = execute(request);
 
@@ -184,7 +186,7 @@ public class HttpSourceTask extends SourceTask {
             }
             Thread.sleep(300);
         }
-
+        
         List<SourceRecord> unseenRecords = recordSorter.sort(allRecords).stream()
                 .filter(recordFilterFactory.create(offset))
                 .collect(toList());
@@ -198,7 +200,7 @@ public class HttpSourceTask extends SourceTask {
                 ((Map<String,Long>)s.sourceOffset()).put(AUTOTIMESTAMP, Long.valueOf(autoOffset));
             }
             offset.setValue(AUTOTIMESTAMP, autoOffset);
-            log.info("AutoOffset Patch {}", offset.toString());
+            log.debug("AutoOffset Patch {}", offset.toString());
         }
 
         log.info("Request for offset {} yields {}/{} new records", offset.toMap(), unseenRecords.size(), allRecords.size());
@@ -217,6 +219,8 @@ public class HttpSourceTask extends SourceTask {
     }
 
     private static List<Map<String, ?>> extractOffsets(List<SourceRecord> recordsToSend) {
+        log.debug("Extracting offsets: {} ", recordsToSend.stream()
+                    .map(SourceRecord::sourceOffset).collect(toList()));
         return recordsToSend.stream()
                 .map(SourceRecord::sourceOffset)
                 .collect(toList());

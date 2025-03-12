@@ -37,14 +37,12 @@ public class CollectionUtils {
             Function<? super T, ? extends K> keyMapper,
             Function<? super T, ? extends U> valueMapper) {
 
-        return toMap(
-                keyMapper,
-                valueMapper,
-                (u, v) -> {
-                    throw new IllegalStateException(String.format("Duplicate key %s", u));
-                },
-                LinkedHashMap::new
-        );
+                return toMap(
+                    keyMapper,
+                    valueMapper,
+                    (oldValue, newValue) -> newValue,  // Keep the latest value for duplicate keys
+                    LinkedHashMap::new
+            );
     }
 
     public static <S, T> Map<S, T> merge(Map<S, T> mapA, Map<S, T> mapB) {

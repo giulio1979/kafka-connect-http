@@ -25,6 +25,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.castorm.kafka.connect.http.response.jackson.model.JacksonRecord;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.apache.kafka.common.Configurable;
 
 import java.util.Date;
@@ -37,6 +39,7 @@ import static java.util.Collections.emptyMap;
 import static java.util.stream.Collectors.toMap;
 
 @RequiredArgsConstructor
+@Slf4j
 public class JacksonResponseRecordParser implements Configurable {
 
     private final Function<Map<String, ?>, JacksonRecordParserConfig> configFactory;
@@ -63,11 +66,14 @@ public class JacksonResponseRecordParser implements Configurable {
         responseOffsetPointers = config.getResponseOffsetPointers();
     }
 
+
     Stream<JacksonRecord> getRecords(byte[] body) {
 
         JsonNode jsonBody = serializer.deserialize(body);
 
         Map<String, Object> responseOffset = getResponseOffset(jsonBody);
+        
+        log.debug("responseOffset: {}", responseOffset);
 
         return serializer.getArrayAt(jsonBody, recordsPointer)
                 .map(jsonRecord -> toJacksonRecord(jsonRecord, responseOffset));
@@ -86,6 +92,7 @@ public class JacksonResponseRecordParser implements Configurable {
     }
 
     private JacksonRecord toJacksonRecord(JsonNode jsonRecord, Map<String, Object> responseOffset) {
+        log.debug("Merged record: {}", merge(responseOffset, recordParser.getOffset(jsonRecord)));
         return JacksonRecord.builder()
                 .key(recordParser.getKey(jsonRecord).orElse(null))
                 .timestamp(recordParser.getTimestamp(jsonRecord).orElse(null))
