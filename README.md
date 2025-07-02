@@ -178,17 +178,11 @@ The first thing our connector will need to do is creating a `HttpRequest`.
 >
 > #### `http.response.offset.pointer`
 > Which offsets to pick from root response
-> *   Example: `hasNextPage=/pagination/hasNextPage, endCursor=/pagination/endCursor`
+> *   Example: `endCursor=/pagination/endCursor`
 > *   Type: `String`
 > *   Default: `""`
 >
-> #### `http.response.skip.policy.offsets`
-> Which offsets to pick from root response
-> *   Example: `hasNextPage=false`
-> *   Type: `String`
-> *   Default: `""`
->
-> 
+
 
 #### Creating a `HttpRequest` with `TemplateHttpRequestFactory`
 This `HttpRequestFactory` is based on template resolution.

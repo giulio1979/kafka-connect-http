@@ -80,7 +80,6 @@ public class HttpSourceTask extends SourceTask {
     private ConfirmationWindow<Map<String, ?>> confirmationWindow = new ConfirmationWindow<>(emptyList());
 
     private String nextPageOffsetField;
-    private String hasNextPageField;
 
     private String autoDateInitialOffset;
     private String sautoDateIncrement;
@@ -110,7 +109,6 @@ public class HttpSourceTask extends SourceTask {
         recordFilterFactory = config.getRecordFilterFactory();
         offset = loadOffset(config.getInitialOffset());
         nextPageOffsetField = config.getNextPageOffsetField();
-        hasNextPageField  = config.getHasNextPageField();
 
         autoDateInitialOffset = config.getAutoDateInitialOffset();
         sautoDateIncrement = config.getAutoDateIncrement();
@@ -132,8 +130,8 @@ public class HttpSourceTask extends SourceTask {
         long autoOffset = 0;
         long autoDateIncrement = 0;
         long autoDateBackoff = 0;
-        boolean pagingEnabled = nextPageOffsetField != null && !nextPageOffsetField.isEmpty() && hasNextPageField != null && !hasNextPageField.isEmpty();
-
+        boolean pagingEnabled = nextPageOffsetField != null && !nextPageOffsetField.isEmpty();
+        
         if( autoDateInitialOffset != null && !autoDateInitialOffset.isEmpty()) {
             try {
                 LocalDateTime dateTime = LocalDateTime.parse(autoDateInitialOffset, formatter);
@@ -152,20 +150,22 @@ public class HttpSourceTask extends SourceTask {
             offset.setValue(AUTOTIMESTAMP, autoOffset);
         }
 
-        String hasNextPageFlag = "true";
         String nextPageValue = "";
 
-        if(pagingEnabled){
+        if(pagingEnabled) {
             offset.setValue(nextPageOffsetField, "");
-            offset.setValue(hasNextPageField, "");
         }
 
-        while(hasNextPageFlag.matches("true")) {
+        boolean hasMorePages = true;
+        while(hasMorePages) {
             HttpRequest request = requestFactory.createRequest(offset);
 
             log.info("Offset: {}", offset.toString());
             log.info("Request: {}", request.toString());
-            log.info("Config: autoOffset = {} nextPageOffsetField = {} nextPageValue = {} hasNextPageField = {} hasNextPageFlag = {}", DateFormat.getDateInstance().format(new Date(autoOffset)), nextPageOffsetField, nextPageValue, hasNextPageField, hasNextPageFlag);
+            log.info("Config: autoOffset = {} nextPageOffsetField = {} nextPageValue = {}", 
+                    DateFormat.getDateInstance().format(new Date(autoOffset)), 
+                    nextPageOffsetField, 
+                    nextPageValue);
 
             HttpResponse response = execute(request);
 
@@ -173,20 +173,25 @@ public class HttpSourceTask extends SourceTask {
 
             if(!records.isEmpty()) {
                 allRecords.addAll(records);
-                if(pagingEnabled){
+                if(pagingEnabled) {
                     nextPageValue = (String) records.get(0).sourceOffset().get(nextPageOffsetField);
-                    hasNextPageFlag = (String) records.get(0).sourceOffset().get(hasNextPageField);                
                     offset.setValue(nextPageOffsetField, nextPageValue);
-                    offset.setValue(hasNextPageField, hasNextPageFlag);
+                    hasMorePages = nextPageValue != null && !nextPageValue.isEmpty();
                 } else {
-                    hasNextPageFlag = "";
+                    hasMorePages = false;
+                    if(pagingEnabled) {
+                        offset.setValue(nextPageOffsetField, "");
+                    }
                 }
             } else {
-                hasNextPageFlag = "";
+                hasMorePages = false;
+                if(pagingEnabled) {
+                    offset.setValue(nextPageOffsetField, "");
+                }
             }
             Thread.sleep(300);
         }
-        
+
         List<SourceRecord> unseenRecords = recordSorter.sort(allRecords).stream()
                 .filter(recordFilterFactory.create(offset))
                 .collect(toList());
@@ -202,7 +207,12 @@ public class HttpSourceTask extends SourceTask {
             offset.setValue(AUTOTIMESTAMP, autoOffset);
             log.debug("AutoOffset Patch {}", offset.toString());
         }
-
+        if(pagingEnabled) {
+            for(SourceRecord s: allRecords) {
+                ((Map<String,String>)s.sourceOffset()).put(nextPageOffsetField, String.valueOf(""));
+            }
+            offset.setValue(nextPageOffsetField, "");            
+        } 
         log.info("Request for offset {} yields {}/{} new records", offset.toMap(), unseenRecords.size(), allRecords.size());
 
         confirmationWindow = new ConfirmationWindow<>(extractOffsets(unseenRecords));
