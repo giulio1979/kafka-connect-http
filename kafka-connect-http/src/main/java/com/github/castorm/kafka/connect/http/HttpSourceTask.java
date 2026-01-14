@@ -176,7 +176,7 @@ public class HttpSourceTask extends SourceTask {
                 if(pagingEnabled) {
                     nextPageValue = (String) records.get(0).sourceOffset().get(nextPageOffsetField);
                     offset.setValue(nextPageOffsetField, nextPageValue);
-                    hasMorePages = nextPageValue != null && !nextPageValue.isEmpty();
+                    hasMorePages = nextPageValue != null && !nextPageValue.isEmpty() && !nextPageValue.equalsIgnoreCase("null");
                 } else {
                     hasMorePages = false;
                     if(pagingEnabled) {
