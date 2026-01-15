@@ -24,6 +24,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.castorm.kafka.connect.http.auth.spi.HttpAuthenticator;
 
+import java.util.Base64;
 import okhttp3.*;
 import okhttp3.logging.HttpLoggingInterceptor;
 import org.apache.kafka.connect.errors.RetriableException;
@@ -67,7 +68,13 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
             cachedToken = null;
             try {
                 cachedToken = fetchData();
-                tokenExpiry = Instant.now().plusSeconds(config.getTokenExpirySeconds());
+                Instant jwtExpiry = getJwtExpiry(cachedToken);
+                if (jwtExpiry != null) {
+                    // Refresh 30 seconds before actual expiry to be safe
+                    tokenExpiry = jwtExpiry.minusSeconds(30);
+                } else {
+                    tokenExpiry = Instant.now().plusSeconds(config.getTokenExpirySeconds());
+                }
             } catch (Exception e) {
                 throw new RetriableException("Error: " + e.getMessage(), e);
             }
@@ -78,53 +85,78 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
         return Optional.of("Bearer " + cachedToken);
     }
 
-    public String fetchData() {
-        String credentialsBody = config.getAuthBody().value();
-        RequestBody requestBody = FormBody.create(credentialsBody.getBytes());
-
-        String response = execute(requestBody);
-
-        ObjectMapper objectMapper = new ObjectMapper();
-
-        String accessToken;
+    private Instant getJwtExpiry(String token) {
         try {
-            accessToken = objectMapper.readTree(response).path(config.getTokenKeyPath()).asText();
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return null;
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+            ObjectMapper mapper = new ObjectMapper();
+            long exp = mapper.readTree(payload).path("exp").asLong();
+            if (exp > 0) {
+                return Instant.ofEpochSecond(exp);
+            }
+        } catch (Exception e) {
+            // Token might not be a JWT or parsing failed, fallback to configured expiry
+        }
+        return null;
+    }
+
+    public String fetchData() {
+        String data = execute(config.getAuthUrl(), config.getAuthMethod(), config.getHeaders(), config.getAuthBody().value());
+        String key = config.getAuthChainUrl() != null && !config.getAuthChainUrl().isEmpty() ?
+                config.getAuthChainTokenKey() : config.getTokenKeyPath();
+        String token = parseToken(data, key);
+
+        if (config.getAuthChainUrl() != null && !config.getAuthChainUrl().isEmpty()) {
+            String chainHeaders = config.getAuthChainHeaders().replace("{{token}}", token);
+            String chainData = execute(config.getAuthChainUrl(), config.getAuthChainMethod(), chainHeaders, config.getAuthChainBody().value());
+            token = parseToken(chainData, config.getTokenKeyPath());
+        }
+
+        return token;
+    }
+
+    private String parseToken(String response, String key) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            String token = objectMapper.readTree(response).path(key).asText();
+            if (token == null || token.isBlank()) {
+                throw new RetriableException("Error: No token found at " + key + " Response was: " + response);
+            }
+            return token;
         } catch (JsonProcessingException e) {
             throw new RetriableException("Error: " + e.getMessage(), e);
         }
-
-        if (accessToken.isBlank()) {
-            throw new RetriableException("Error: No access token found at " + config.getTokenKeyPath() + " Response was:" + response);
-        }
-
-        return accessToken;
     }
 
     private boolean isTokenExpired() {
         return Instant.now().isAfter(tokenExpiry) || cachedToken == null || cachedToken.isEmpty();
     }
 
-    private String execute(RequestBody requestBody) {
+    private String execute(String url, String method, String headersStr, String bodyStr) {
         OkHttpClient httpClient = new OkHttpClient();
 
         try {
-            Map<String, String> m = breakDownMap(config.getHeaders());
+            Map<String, String> m = breakDownMap(headersStr);
             okhttp3.Headers headers = okhttp3.Headers.of(m);
 
-            Request request = null;
-            if(config.getAuthMethod().toString().equalsIgnoreCase("POST"))
-                request = new Request.Builder()
-                        .url(config.getAuthUrl())
-                        .headers(headers)
-                        .post(requestBody).build();
-            else
-                request = new Request.Builder()
-                        .url(config.getAuthUrl())
-                        .headers(headers)
-                        .get().build();
+            Request.Builder builder = new Request.Builder()
+                    .url(url)
+                    .headers(headers);
 
-            Response response = httpClient.newCall(request).execute();
+            if (method.equalsIgnoreCase("POST")) {
+                RequestBody body = RequestBody.create(MediaType.parse("application/json"), bodyStr.getBytes());
+                builder.post(body);
+            } else if (method.equalsIgnoreCase("PUT")) {
+                RequestBody body = RequestBody.create(MediaType.parse("application/json"), bodyStr.getBytes());
+                builder.put(body);
+            } else {
+                builder.get();
+            }
 
+            Response response = httpClient.newCall(builder.build()).execute();
+                
+            if (response.body() == null) return "";
             return response.body().string();
         } catch (IOException e) {
             throw new RetriableException("Error: " + e.getMessage(), e);

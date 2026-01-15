@@ -40,6 +40,11 @@ public class TokenEndpointAuthenticatorConfig extends AbstractConfig {
     private static final String TOKEN_KEY_PATH = "http.auth.tokenkeypath";
     private static final String HEADERS = "http.token.request.headers";
     private static final String TOKEN_EXPIRY = "http.token.expiry.seconds";
+    private static final String AUTH_CHAIN_URL = "http.auth.chain.url";
+    private static final String AUTH_CHAIN_METHOD = "http.auth.chain.method";
+    private static final String AUTH_CHAIN_TOKEN_KEY = "http.auth.chain.token.key";
+    private static final String AUTH_CHAIN_HEADERS = "http.auth.chain.headers";
+    private static final String AUTH_CHAIN_BODY = "http.auth.chain.body";
 
     private final String authUrl;
     private final Password authBody;
@@ -47,6 +52,11 @@ public class TokenEndpointAuthenticatorConfig extends AbstractConfig {
     private final String headers;
     private final Integer tokenExpirySeconds;
     private final String authMethod;
+    private final String authChainUrl;
+    private final String authChainMethod;
+    private final String authChainTokenKey;
+    private final String authChainHeaders;
+    private final Password authChainBody;
 
     public TokenEndpointAuthenticatorConfig(Map<?, ?> originals) {
         super(config(), originals);
@@ -56,6 +66,11 @@ public class TokenEndpointAuthenticatorConfig extends AbstractConfig {
         authMethod = getString(AUTH_METHOD);
         headers = getString(HEADERS);
         tokenExpirySeconds = getInt(TOKEN_EXPIRY);
+        authChainUrl = getString(AUTH_CHAIN_URL);
+        authChainMethod = getString(AUTH_CHAIN_METHOD);
+        authChainTokenKey = getString(AUTH_CHAIN_TOKEN_KEY);
+        authChainHeaders = getString(AUTH_CHAIN_HEADERS);
+        authChainBody = getPassword(AUTH_CHAIN_BODY);
     }
 
     public static ConfigDef config() {
@@ -64,7 +79,12 @@ public class TokenEndpointAuthenticatorConfig extends AbstractConfig {
                 .define(AUTH_URL, STRING, "", HIGH, "Auth endpoint")
                 .define(AUTH_METHOD, STRING, "POST", HIGH, "Auth Method")
                 .define(HEADERS, STRING, "", MEDIUM, "HTTP Token Headers Template")
-                .define(TOKEN_EXPIRY, INT, 60 * 59, MEDIUM, "HTTP Token Expiry time");
+                .define(TOKEN_EXPIRY, INT, 60 * 59, MEDIUM, "HTTP Token Expiry time")
+                .define(AUTH_CHAIN_URL, STRING, "", MEDIUM, "Auth Chain Endpoint")
+                .define(AUTH_CHAIN_METHOD, STRING, "GET", MEDIUM, "Auth Chain Method")
+                .define(AUTH_CHAIN_TOKEN_KEY, STRING, "refresh_token", MEDIUM, "Auth Chain Request Response Token Key")
+                .define(AUTH_CHAIN_HEADERS, STRING, "", MEDIUM, "Auth Chain Headers Template")
+                .define(AUTH_CHAIN_BODY, ConfigDef.Type.PASSWORD, "", MEDIUM, "Auth Chain Body");
     }
 
 }
