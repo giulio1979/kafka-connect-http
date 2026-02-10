@@ -50,6 +50,11 @@ class ConfigurableHttpAuthenticatorConfigTest {
         assertThat(config(ImmutableMap.of("http.auth.type", "Token_Endpoint")).getAuthenticator()).isInstanceOf(TokenEndpointAuthenticator.class);
     }
 
+    @Test
+    void whenOAuthType_thenOAuth() {
+        assertThat(config(ImmutableMap.of("http.auth.type", "OAuth")).getAuthenticator()).isInstanceOf(OAuthClientCredentialsAuthenticator.class);
+    }
+
     private static ConfigurableHttpAuthenticatorConfig config(Map<String, String> config) {
         return new ConfigurableHttpAuthenticatorConfig(config);
     }

@@ -171,7 +171,7 @@ The first thing our connector will need to do is creating a `HttpRequest`.
 
 >
 > #### `http.offset.nextpage`
-> which response offset will hold next page parameter to trigger subsequent calls
+> Which response offset property will hold the next page parameter to trigger subsequent calls. When set, the connector will loop through pages until the response no longer contains a next-page value.
 > *   Example: `endCursor`
 > *   Type: `String`
 > *   Default: `""`
@@ -180,6 +180,29 @@ The first thing our connector will need to do is creating a `HttpRequest`.
 > Which offsets to pick from root response
 > *   Example: `endCursor=/pagination/endCursor`
 > *   Type: `String`
+> *   Default: `""`
+>
+
+### Auto-Date Increment
+Automatically increments a date-based offset on each poll cycle, enabling time-windowed API queries. When `http.offset.date_initial_date` is set, the connector maintains an auto-incrementing timestamp in the offset. On each poll, the timestamp advances by `date_increment` milliseconds (minus `date_backoff` as a safety buffer), and is capped at the current time. This timestamp is available as `${offset.autotimestamp}` in request templates.
+
+>
+> #### `http.offset.date_initial_date`
+> Initial date for the auto-incrementing offset, in ISO 8601 format. When set, enables the auto-date increment feature.
+> *   Example: `2023-01-01T00:00:00`
+> *   Type: `String`
+> *   Default: `""`
+>
+> #### `http.offset.date_increment`
+> Amount to increment the auto-date offset on each poll, in milliseconds.
+> *   Example: `86400000` (1 day)
+> *   Type: `String` (parsed as `Long`)
+> *   Default: `""`
+>
+> #### `http.offset.date_backoff`
+> Safety backoff subtracted from the auto-date increment on each poll, in milliseconds. Also used to cap the offset so it doesn't exceed `now - backoff`.
+> *   Example: `1000` (1 second)
+> *   Type: `String` (parsed as `Long`)
 > *   Default: `""`
 >
 
@@ -287,10 +310,15 @@ Uses a [OkHttp](https://square.github.io/okhttp/) client.
 > *   Type: `Long`
 > *   Default: `2000`
 > 
-> ##### `http.client.connection.ttl.millis`
-> Time to live for the connection
+> ##### `http.client.ttl.millis`
+> Keep alive duration for connections
 > *   Type: `Long`
 > *   Default: `300000`
+> 
+> ##### `http.client.max-idle`
+> Maximum number of idle connections in the connection pool
+> *   Type: `Integer`
+> *   Default: `1`
 > 
 > ##### `http.client.proxy.host`
 > Hostname of the HTTP Proxy
@@ -311,6 +339,16 @@ Uses a [OkHttp](https://square.github.io/okhttp/) client.
 > Password of the HTTP Proxy
 > *   Type: `String`
 > *   Default: ``
+>
+> ##### `http.client.keystore`
+> Path to a PKCS12/JKS keystore for client TLS certificates
+> *   Type: `String`
+> *   Default: `""`
+>
+> ##### `http.client.keystore.password`
+> Password for the keystore
+> *   Type: `Password`
+> *   Default: `""`
 ---
 <a name="auth"/>
 
@@ -331,13 +369,14 @@ to be included in the `HttpRequest`.
 >     *   `com.github.castorm.kafka.connect.http.auth.ConfigurableHttpAuthenticator`
 >     *   `com.github.castorm.kafka.connect.http.auth.NoneHttpAuthenticator`
 >     *   `com.github.castorm.kafka.connect.http.auth.BasicHttpAuthenticator`
+>     *   `com.github.castorm.kafka.connect.http.auth.OAuthClientCredentialsAuthenticator`
 
 #### Authenticating with `ConfigurableHttpAuthenticator`
 Allows selecting the authentication type via configuration property
 
 > ##### `http.auth.type`
 > Type of authentication
-> *   Type: `Enum { None, Basic, Token }`
+> *   Type: `Enum { None, Basic, Token_Endpoint, Bearer, OAuth }`
 > *   Default: `None`
 
 #### Authenticating with `BasicHttpAuthenticator`
@@ -351,20 +390,135 @@ Allows selecting the authentication type via configuration property
 > *   Type: `String`
 > *   Default: `"""`
 
-#### Authenticating with `TokenAuthenticator`
-Allows selecting the Bearer token authentication 
+#### Authenticating with `TokenEndpointAuthenticator`
+Fetches a Bearer token from an HTTP endpoint, caches it with automatic expiry management (via JWT `exp` claim or configurable fallback), and supports optional two-step chained authentication.
+
+Set `http.auth.type=Token_Endpoint` to use this authenticator.
 
 > ##### `http.auth.url`
+> Token endpoint URL
 > *   Type: `String`
 > *   Default: `""`
 >
-> ##### `http.auth.body`
+> ##### `http.auth.method`
+> HTTP method for the token request
 > *   Type: `String`
-> *   Default: `"""`
+> *   Default: `"POST"`
+>
+> ##### `http.auth.body`
+> Request body (e.g. JSON or form-encoded payload) sent to the token endpoint
+> *   Type: `Password`
+> *   Default: `""`
 >
 > ##### `http.auth.tokenkeypath`
+> JSON key to extract the access token from the response
 > *   Type: `String`
-> *   Default: `"""`
+> *   Default: `"access_token"`
+>
+> ##### `http.token.request.headers`
+> HTTP headers for the token request as comma-separated `Key=Value` pairs
+> *   Example: `Content-Type=application/x-www-form-urlencoded,Authorization=Basic dXNlcjpwYXNz`
+> *   Type: `String`
+> *   Default: `""`
+>
+> ##### `http.token.expiry.seconds`
+> Fallback token expiry in seconds, used when the token is not a JWT with an `exp` claim
+> *   Type: `Integer`
+> *   Default: `3540` (59 minutes)
+>
+> ##### `http.auth.chain.url`
+> Second-step chain endpoint URL. When set, enables two-step authentication: the first call fetches a refresh token, the second call uses it to get the access token.
+> *   Type: `String`
+> *   Default: `""`
+>
+> ##### `http.auth.chain.method`
+> HTTP method for the chain request
+> *   Type: `String`
+> *   Default: `"GET"`
+>
+> ##### `http.auth.chain.token.key`
+> JSON key to extract the intermediate token from the first-step response (used in chained auth)
+> *   Type: `String`
+> *   Default: `"refresh_token"`
+>
+> ##### `http.auth.chain.headers`
+> HTTP headers for the chain request as comma-separated `Key=Value` pairs. Supports `{{token}}` placeholder which is replaced with the token from the first step.
+> *   Type: `String`
+> *   Default: `""`
+>
+> ##### `http.auth.chain.body`
+> Request body for the chain request
+> *   Type: `Password`
+> *   Default: `""`
+
+#### Authenticating with `BearerAuthenticator`
+Uses a static Bearer token provided directly via configuration. No token refresh or endpoint calls.
+
+Set `http.auth.type=Bearer` to use this authenticator.
+
+> ##### `http.auth.bearer`
+> The full `Authorization` header value (e.g. `Bearer eyJ...`)
+> *   Type: `String`
+> *   Default: `""`
+
+#### Authenticating with `OAuthClientCredentialsAuthenticator`
+Implements the OAuth2 Client Credentials grant flow. Automatically fetches and caches an access token from an OAuth2 token endpoint using `client_id`, `client_secret`, and optional `scope`. Tokens are cached and refreshed automatically based on JWT `exp` claim, the `expires_in` field in the response, or a configurable fallback expiry.
+
+Set `http.auth.type=OAuth` to use this authenticator.
+
+> ##### `http.auth.oauth.token.url`
+> The OAuth2 token endpoint URL
+> *   Type: `String`
+> *   Default: `""`
+>
+> ##### `http.auth.oauth.client.id`
+> OAuth2 client ID
+> *   Type: `String`
+> *   Default: `""`
+>
+> ##### `http.auth.oauth.client.secret`
+> OAuth2 client secret
+> *   Type: `Password`
+> *   Default: `""`
+>
+> ##### `http.auth.oauth.scope`
+> OAuth2 scopes (space-separated). If empty, scope is omitted from the token request.
+> *   Type: `String`
+> *   Default: `""`
+>
+> ##### `http.auth.oauth.method`
+> HTTP method for the token request
+> *   Type: `String`
+> *   Default: `"POST"`
+>
+> ##### `http.auth.oauth.headers`
+> HTTP headers for the token request as comma-separated `Key=Value` pairs
+> *   Type: `String`
+> *   Default: `"Content-Type=application/x-www-form-urlencoded,Accept=application/json"`
+>
+> ##### `http.auth.oauth.token.key`
+> JSON key to extract the access token from the token endpoint response
+> *   Type: `String`
+> *   Default: `"access_token"`
+>
+> ##### `http.auth.oauth.grant.type`
+> OAuth2 grant type
+> *   Type: `String`
+> *   Default: `"client_credentials"`
+>
+> ##### `http.auth.oauth.token.expiry.seconds`
+> Fallback token expiry in seconds, used when the response does not include `expires_in` and the token is not a JWT with an `exp` claim
+> *   Type: `Integer`
+> *   Default: `3540` (59 minutes)
+
+**Example configuration:**
+```properties
+http.auth.type=OAuth
+http.auth.oauth.token.url=https://api.example.com/identity/connect/token
+http.auth.oauth.client.id=my-client-id
+http.auth.oauth.client.secret=my-client-secret
+http.auth.oauth.scope=myapi:read
+```
 
 ---
 <a name="response"/>
