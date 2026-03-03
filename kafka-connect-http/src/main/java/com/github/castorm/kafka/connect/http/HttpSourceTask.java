@@ -85,6 +85,9 @@ public class HttpSourceTask extends SourceTask {
     private String sautoDateIncrement;
     private String sautoDateBackoff;
 
+    private String offsetCounterField;
+    private String offsetCounterTotalField;
+
     @Getter
     private Offset offset;
 
@@ -113,6 +116,9 @@ public class HttpSourceTask extends SourceTask {
         autoDateInitialOffset = config.getAutoDateInitialOffset();
         sautoDateIncrement = config.getAutoDateIncrement();
         sautoDateBackoff = config.getAutoDateBackoff();
+
+        offsetCounterField = config.getOffsetCounterField();
+        offsetCounterTotalField = config.getOffsetCounterTotalField();
     }
 
     private Offset loadOffset(Map<String, String> initialOffset) {
@@ -131,7 +137,20 @@ public class HttpSourceTask extends SourceTask {
         long autoDateIncrement = 0;
         long autoDateBackoff = 0;
         boolean pagingEnabled = nextPageOffsetField != null && !nextPageOffsetField.isEmpty();
-        
+        boolean counterPagingEnabled = offsetCounterField != null && !offsetCounterField.isEmpty();
+        long offsetCounter = 0;
+        long total = Long.MAX_VALUE;
+
+        if (counterPagingEnabled) {
+            Object existing = offset.toMap().get(offsetCounterField);
+            if (existing instanceof Number) {
+                offsetCounter = ((Number) existing).longValue();
+            } else if (existing instanceof String && !((String) existing).isEmpty()) {
+                try { offsetCounter = Long.parseLong((String) existing); } catch (NumberFormatException ignored) {}
+            }
+            offset.setValue(offsetCounterField, offsetCounter);
+        }
+
         if( autoDateInitialOffset != null && !autoDateInitialOffset.isEmpty()) {
             try {
                 LocalDateTime dateTime = LocalDateTime.parse(autoDateInitialOffset, formatter);
@@ -177,11 +196,20 @@ public class HttpSourceTask extends SourceTask {
                     nextPageValue = (String) records.get(0).sourceOffset().get(nextPageOffsetField);
                     offset.setValue(nextPageOffsetField, nextPageValue);
                     hasMorePages = nextPageValue != null && !nextPageValue.isEmpty() && !nextPageValue.equalsIgnoreCase("null");
+                } else if (counterPagingEnabled) {
+                    Object totalObj = records.get(0).sourceOffset().get(offsetCounterTotalField);
+                    if (totalObj != null) {
+                        try { total = Long.parseLong(totalObj.toString()); } catch (NumberFormatException ignored) {}
+                    }
+                    offsetCounter += records.size();
+                    hasMorePages = allRecords.size() < total;
+                    log.info("Counter paging: fetched={}, total={}, nextOffset={}, hasMorePages={}",
+                            allRecords.size(), total, offsetCounter, hasMorePages);
+                    if (hasMorePages) {
+                        offset.setValue(offsetCounterField, offsetCounter);
+                    }
                 } else {
                     hasMorePages = false;
-                    if(pagingEnabled) {
-                        offset.setValue(nextPageOffsetField, "");
-                    }
                 }
             } else {
                 hasMorePages = false;
@@ -212,7 +240,14 @@ public class HttpSourceTask extends SourceTask {
                 ((Map<String,String>)s.sourceOffset()).put(nextPageOffsetField, String.valueOf(""));
             }
             offset.setValue(nextPageOffsetField, "");            
-        } 
+        }
+        if (counterPagingEnabled) {
+            offsetCounter = 0;
+            offset.setValue(offsetCounterField, offsetCounter);
+            for (SourceRecord s : allRecords) {
+                ((Map<String, Object>) s.sourceOffset()).put(offsetCounterField, offsetCounter);
+            }
+        }
         log.info("Request for offset {} yields {}/{} new records", offset.toMap(), unseenRecords.size(), allRecords.size());
 
         confirmationWindow = new ConfirmationWindow<>(extractOffsets(unseenRecords));

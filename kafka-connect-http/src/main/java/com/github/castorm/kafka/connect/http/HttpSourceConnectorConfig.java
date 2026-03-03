@@ -59,6 +59,8 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     public static final String AUTODATE_INITIAL_OFFSET = "http.offset.date_initial_date";
     public static final String AUTODATE_INCREMENT = "http.offset.date_increment";
     public static final String AUTODATE_BACKOFF = "http.offset.date_backoff";
+    private static final String OFFSET_COUNTER_FIELD = "http.offset.counter";
+    private static final String OFFSET_COUNTER_TOTAL_FIELD = "http.offset.counter.total.field";
 
     private final TimerThrottler throttler;
     private final HttpRequestFactory requestFactory;
@@ -71,6 +73,8 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     private String autoDateInitialOffset;
     private String autoDateIncrement;
     private String autoDateBackoff;
+    private String offsetCounterField;
+    private String offsetCounterTotalField;
 
     HttpSourceConnectorConfig(Map<String, ?> originals) {
         super(config(), originals);
@@ -86,6 +90,8 @@ class HttpSourceConnectorConfig extends AbstractConfig {
         autoDateInitialOffset = getString(AUTODATE_INITIAL_OFFSET);
         autoDateIncrement = getString(AUTODATE_INCREMENT);
         autoDateBackoff = getString(AUTODATE_BACKOFF);
+        offsetCounterField = getString(OFFSET_COUNTER_FIELD);
+        offsetCounterTotalField = getString(OFFSET_COUNTER_TOTAL_FIELD);
     }
 
     public static ConfigDef config() {
@@ -100,6 +106,8 @@ class HttpSourceConnectorConfig extends AbstractConfig {
                 .define(NEXT_PAGE_OFFSET, STRING, "", HIGH, "Next Page offset")
                 .define(AUTODATE_INITIAL_OFFSET, STRING, "", HIGH, "Automatic Date Initial Offset")
                 .define(AUTODATE_INCREMENT, STRING, "", HIGH, "Automatic Date Increment")
-                .define(AUTODATE_BACKOFF, STRING, "", HIGH, "Automatic Date Backoff");
+                .define(AUTODATE_BACKOFF, STRING, "", HIGH, "Automatic Date Backoff")
+                .define(OFFSET_COUNTER_FIELD, STRING, "", LOW, "Counter-based paging: offset field name (e.g. offsetCounter). Empty = disabled.")
+                .define(OFFSET_COUNTER_TOTAL_FIELD, STRING, "total", LOW, "Counter-based paging: response body field containing total record count (e.g. total)");
     }
 }
