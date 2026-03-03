@@ -93,7 +93,14 @@ public class OkHttpClient implements HttpClient {
                 .followSslRedirects(false)
                 .addInterceptor(createLoggingInterceptor())
                 .addInterceptor(chain -> chain.proceed(authorize(chain.request())))
-                .authenticator((route, response) -> authorize(response.request()))
+                .authenticator((route, response) -> {
+                    // If we already tried authorizing this response chain, don't retry with the same token
+                    if (response.request().header(AUTHORIZATION) != null) {
+                        log.warn("Received 401 despite having Authorization header — token may be stale, returning null to stop retry");
+                        return null;
+                    }
+                    return authorize(response.request());
+                })
                 .proxy(resolveProxy(config.getProxyHost(), config.getProxyPort()))
                 .proxyAuthenticator(resolveProxyAuthenticator(config.getProxyUsername(), config.getProxyPassword()));
 

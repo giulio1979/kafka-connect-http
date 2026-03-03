@@ -235,12 +235,14 @@ public class HttpSourceTask extends SourceTask {
             offset.setValue(AUTOTIMESTAMP, autoOffset);
             log.debug("AutoOffset Patch {}", offset.toString());
         }
+
         if(pagingEnabled) {
             for(SourceRecord s: allRecords) {
                 ((Map<String,String>)s.sourceOffset()).put(nextPageOffsetField, String.valueOf(""));
             }
             offset.setValue(nextPageOffsetField, "");            
         }
+        
         if (counterPagingEnabled) {
             offsetCounter = 0;
             offset.setValue(offsetCounterField, offsetCounter);

@@ -26,7 +26,6 @@ import com.github.castorm.kafka.connect.http.auth.spi.HttpAuthenticator;
 
 import java.util.Base64;
 import okhttp3.*;
-import okhttp3.logging.HttpLoggingInterceptor;
 import org.apache.kafka.connect.errors.RetriableException;
 
 import org.apache.kafka.connect.errors.ConnectException;
@@ -36,14 +35,17 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import static com.github.castorm.kafka.connect.common.ConfigUtils.breakDownHeaders;
 import static com.github.castorm.kafka.connect.common.ConfigUtils.breakDownMap;
-import static okhttp3.logging.HttpLoggingInterceptor.Level.BODY;
-import static okhttp3.logging.HttpLoggingInterceptor.Logger.DEFAULT;
 
 public class TokenEndpointAuthenticator implements HttpAuthenticator {
+    private static final Logger log = LoggerFactory.getLogger(TokenEndpointAuthenticator.class);
+    private static final int TOKEN_EXPIRY_BUFFER_SECONDS = 60;
+
     private final Function<Map<String, ?>, TokenEndpointAuthenticatorConfig> configFactory;
+    private final OkHttpClient httpClient = new OkHttpClient();
     private TokenEndpointAuthenticatorConfig config;
     private String cachedToken = null;
     private Instant tokenExpiry = Instant.EPOCH;
@@ -65,17 +67,22 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
     @Override
     public Optional<String> getAuthorizationHeader() {
         if (isTokenExpired()) {
+            log.info("Token expired or absent, refreshing. Previous expiry: {}", tokenExpiry);
             cachedToken = null;
+            tokenExpiry = Instant.EPOCH;
             try {
                 cachedToken = fetchData();
                 Instant jwtExpiry = getJwtExpiry(cachedToken);
                 if (jwtExpiry != null) {
-                    // Refresh 30 seconds before actual expiry to be safe
-                    tokenExpiry = jwtExpiry.minusSeconds(30);
+                    tokenExpiry = jwtExpiry.minusSeconds(TOKEN_EXPIRY_BUFFER_SECONDS);
+                    log.info("Token refreshed. JWT exp: {}, will refresh at: {}", jwtExpiry, tokenExpiry);
                 } else {
                     tokenExpiry = Instant.now().plusSeconds(config.getTokenExpirySeconds());
+                    log.info("Token refreshed (non-JWT). Will refresh at: {} (configured expiry: {}s)",
+                            tokenExpiry, config.getTokenExpirySeconds());
                 }
             } catch (Exception e) {
+                log.error("Failed to refresh token", e);
                 throw new RetriableException("Error: " + e.getMessage(), e);
             }
             if (cachedToken == null || cachedToken.isEmpty()) {
@@ -89,14 +96,18 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
         try {
             String[] parts = token.split("\\.");
             if (parts.length < 2) return null;
-            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
+            // JWT Base64URL may lack padding — add it before decoding
+            String base64 = parts[1];
+            int padding = (4 - base64.length() % 4) % 4;
+            base64 = base64 + "=".repeat(padding);
+            String payload = new String(Base64.getUrlDecoder().decode(base64));
             ObjectMapper mapper = new ObjectMapper();
             long exp = mapper.readTree(payload).path("exp").asLong();
             if (exp > 0) {
                 return Instant.ofEpochSecond(exp);
             }
         } catch (Exception e) {
-            // Token might not be a JWT or parsing failed, fallback to configured expiry
+            log.warn("Could not parse JWT expiry, falling back to configured expiry", e);
         }
         return null;
     }
@@ -134,8 +145,6 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
     }
 
     private String execute(String url, String method, String headersStr, String bodyStr) {
-        OkHttpClient httpClient = new OkHttpClient();
-
         try {
             Map<String, String> m = breakDownMap(headersStr);
             okhttp3.Headers headers = okhttp3.Headers.of(m);
@@ -154,10 +163,17 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
                 builder.get();
             }
 
-            Response response = httpClient.newCall(builder.build()).execute();
-                
-            if (response.body() == null) return "";
-            return response.body().string();
+            try (Response response = httpClient.newCall(builder.build()).execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+
+                if (!response.isSuccessful()) {
+                    log.error("Token endpoint {} returned HTTP {}: {}", url, response.code(), responseBody);
+                    throw new RetriableException(
+                            "Token endpoint returned HTTP " + response.code() + ": " + responseBody);
+                }
+
+                return responseBody;
+            }
         } catch (IOException e) {
             throw new RetriableException("Error: " + e.getMessage(), e);
         } catch (IllegalArgumentException e) {
