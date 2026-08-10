@@ -24,12 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -43,7 +43,10 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)"
+          mvn -B help:evaluate \
+            -Dexpression=project.version \
+            -Doutput="${RUNNER_TEMP}/project-version.txt"
+          VERSION="$(tr -d '[:space:]' < "${RUNNER_TEMP}/project-version.txt")"
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             RELEASE_TAG="v${INPUT_VERSION#v}"
           else
