@@ -30,6 +30,14 @@ public interface HttpAuthenticator extends Configurable {
 
     Optional<String> getAuthorizationHeader();
 
+    default void invalidate() {
+        // Stateless authenticators have nothing to invalidate.
+    }
+
+    default long getGeneration() {
+        return 0;
+    }
+
     default void configure(Map<String, ?> map) {
         // Do nothing
     }

@@ -44,6 +44,7 @@ public class OAuthClientCredentialsAuthenticator implements HttpAuthenticator {
     private OAuthClientCredentialsAuthenticatorConfig config;
     private String cachedToken = null;
     private Instant tokenExpiry = Instant.EPOCH;
+    private long tokenGeneration;
 
     public OAuthClientCredentialsAuthenticator() {
         this(OAuthClientCredentialsAuthenticatorConfig::new);
@@ -77,6 +78,7 @@ public class OAuthClientCredentialsAuthenticator implements HttpAuthenticator {
             if (cachedToken == null || cachedToken.isEmpty()) {
                 throw new RetriableException("OAuth token fetch returned empty access token");
             }
+            tokenGeneration++;
         }
         return Optional.of("Bearer " + cachedToken);
     }
@@ -177,6 +179,17 @@ public class OAuthClientCredentialsAuthenticator implements HttpAuthenticator {
 
     private boolean isTokenExpired() {
         return Instant.now().isAfter(tokenExpiry) || cachedToken == null || cachedToken.isEmpty();
+    }
+
+    @Override
+    public void invalidate() {
+        cachedToken = null;
+        tokenExpiry = Instant.EPOCH;
+    }
+
+    @Override
+    public long getGeneration() {
+        return tokenGeneration;
     }
 
     private static String urlEncode(String value) {

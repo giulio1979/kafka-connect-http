@@ -21,6 +21,7 @@ package com.github.castorm.kafka.connect.http;
  */
 
 import com.github.castorm.kafka.connect.http.ack.ConfirmationWindow;
+import com.github.castorm.kafka.connect.http.auth.AuthenticationExpiredException;
 import com.github.castorm.kafka.connect.http.client.spi.HttpClient;
 import com.github.castorm.kafka.connect.http.model.HttpRequest;
 import com.github.castorm.kafka.connect.http.model.HttpResponse;
@@ -87,6 +88,7 @@ public class HttpSourceTask extends SourceTask {
 
     private String offsetCounterField;
     private String offsetCounterTotalField;
+    private int offsetCounterAuthRestartsMax;
 
     @Getter
     private Offset offset;
@@ -119,6 +121,8 @@ public class HttpSourceTask extends SourceTask {
 
         offsetCounterField = config.getOffsetCounterField();
         offsetCounterTotalField = config.getOffsetCounterTotalField();
+        Integer configuredAuthRestartsMax = config.getOffsetCounterAuthRestartsMax();
+        offsetCounterAuthRestartsMax = configuredAuthRestartsMax != null ? configuredAuthRestartsMax : 1;
     }
 
     private Offset loadOffset(Map<String, String> initialOffset) {
@@ -140,6 +144,8 @@ public class HttpSourceTask extends SourceTask {
         boolean counterPagingEnabled = offsetCounterField != null && !offsetCounterField.isEmpty();
         long offsetCounter = 0;
         long total = Long.MAX_VALUE;
+        int authenticationRestarts = 0;
+        long authenticationGeneration = -1;
 
         if (counterPagingEnabled) {
             Object existing = offset.toMap().get(offsetCounterField);
@@ -186,7 +192,46 @@ public class HttpSourceTask extends SourceTask {
                     nextPageOffsetField, 
                     nextPageValue);
 
-            HttpResponse response = execute(request);
+            HttpResponse response;
+            try {
+                response = execute(request);
+            } catch (AuthenticationExpiredException e) {
+                if (!counterPagingEnabled) {
+                    throw e;
+                }
+                authenticationRestarts++;
+                if (authenticationRestarts > offsetCounterAuthRestartsMax) {
+                    throw new RetriableException(
+                            "Authentication changed too often to complete counter pagination", e);
+                }
+                log.warn("Authentication expired during counter pagination; discarding {} records and restarting from offset 0",
+                        allRecords.size());
+                allRecords.clear();
+                offsetCounter = 0;
+                total = Long.MAX_VALUE;
+                authenticationGeneration = -1;
+                offset.setValue(offsetCounterField, offsetCounter);
+                continue;
+            }
+
+            long currentAuthenticationGeneration = requestExecutor.getAuthenticationGeneration();
+            if (counterPagingEnabled && authenticationGeneration >= 0
+                    && currentAuthenticationGeneration != authenticationGeneration) {
+                authenticationRestarts++;
+                if (authenticationRestarts > offsetCounterAuthRestartsMax) {
+                    throw new RetriableException(
+                            "Authentication changed too often to complete counter pagination");
+                }
+                log.warn("Authentication refreshed during counter pagination; discarding {} records and restarting from offset 0",
+                        allRecords.size());
+                allRecords.clear();
+                offsetCounter = 0;
+                total = Long.MAX_VALUE;
+                authenticationGeneration = currentAuthenticationGeneration;
+                offset.setValue(offsetCounterField, offsetCounter);
+                continue;
+            }
+            authenticationGeneration = currentAuthenticationGeneration;
 
             List<SourceRecord> records = responseParser.parse(response);
 

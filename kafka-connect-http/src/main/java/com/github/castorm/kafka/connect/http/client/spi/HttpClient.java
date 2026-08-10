@@ -32,6 +32,10 @@ public interface HttpClient extends Configurable {
 
     HttpResponse execute(HttpRequest request) throws IOException;
 
+    default long getAuthenticationGeneration() {
+        return 0;
+    }
+
     default void configure(Map<String, ?> map) {
         // Do nothing
     }

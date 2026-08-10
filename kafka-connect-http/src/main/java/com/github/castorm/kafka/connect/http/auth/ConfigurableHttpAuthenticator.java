@@ -52,4 +52,14 @@ public class ConfigurableHttpAuthenticator implements HttpAuthenticator {
     public Optional<String> getAuthorizationHeader() {
         return delegate.getAuthorizationHeader();
     }
+
+    @Override
+    public void invalidate() {
+        delegate.invalidate();
+    }
+
+    @Override
+    public long getGeneration() {
+        return delegate.getGeneration();
+    }
 }

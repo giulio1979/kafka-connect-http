@@ -20,6 +20,7 @@ package com.github.castorm.kafka.connect.http;
  * #L%
  */
 
+import com.github.castorm.kafka.connect.http.auth.AuthenticationExpiredException;
 import com.github.castorm.kafka.connect.http.client.spi.HttpClient;
 import com.github.castorm.kafka.connect.http.model.HttpRequest;
 import com.github.castorm.kafka.connect.http.model.HttpResponse;
@@ -62,6 +63,8 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
@@ -315,6 +318,73 @@ class HttpSourceTaskTest {
         given(client.execute(request)).willThrow(new IOException());
 
         assertThat(catchThrowable(() -> task.poll())).isInstanceOf(RetriableException.class);
+    }
+
+    @Test
+    void givenAuthenticationExpiresDuringCounterPaging_whenPoll_thenRestartsFromZero() throws Exception {
+        Map<String, Object> firstPageOffset = new HashMap<>(ImmutableMap.of("total", 4));
+        Map<String, Object> secondPageOffset = new HashMap<>(ImmutableMap.of("total", 4));
+        HttpResponse discardedResponse = HttpResponse.builder().code(200).build();
+        HttpResponse restartedFirstResponse = HttpResponse.builder().code(200).build();
+        HttpResponse restartedSecondResponse = HttpResponse.builder().code(200).build();
+        List<SourceRecord> discardedRecords = asList(record(firstPageOffset), record(firstPageOffset));
+        List<SourceRecord> restartedFirstRecords = asList(record(firstPageOffset), record(firstPageOffset));
+        List<SourceRecord> restartedSecondRecords = asList(record(secondPageOffset), record(secondPageOffset));
+
+        givenTaskConfiguration();
+        given(config.getOffsetCounterField()).willReturn("offsetCounter");
+        given(config.getOffsetCounterTotalField()).willReturn("total");
+        given(config.getOffsetCounterAuthRestartsMax()).willReturn(1);
+        task.initialize(getContext(emptyMap()));
+        task.start(emptyMap());
+
+        given(requestFactory.createRequest(any())).willReturn(request);
+        given(client.execute(request))
+                .willReturn(discardedResponse)
+                .willThrow(new AuthenticationExpiredException("expired"))
+                .willReturn(restartedFirstResponse, restartedSecondResponse);
+        given(client.getAuthenticationGeneration()).willReturn(1L, 2L, 2L);
+        given(responseParser.parse(discardedResponse)).willReturn(discardedRecords);
+        given(responseParser.parse(restartedFirstResponse)).willReturn(restartedFirstRecords);
+        given(responseParser.parse(restartedSecondResponse)).willReturn(restartedSecondRecords);
+        given(recordSorter.sort(any())).willAnswer(invocation -> invocation.getArgument(0));
+        given(recordFilterFactory.create(any())).willReturn(__ -> true);
+
+        assertThat(task.poll()).hasSize(4);
+        assertThat(task.getOffset().toMap()).containsEntry("offsetCounter", 0L);
+        verify(client, times(4)).execute(request);
+    }
+
+    @Test
+    void givenAuthenticationRefreshesDuringCounterPaging_whenPoll_thenRestartsFromZero() throws Exception {
+        Map<String, Object> pageOffset = new HashMap<>(ImmutableMap.of("total", 4));
+        HttpResponse firstResponse = HttpResponse.builder().code(200).build();
+        HttpResponse refreshedResponse = HttpResponse.builder().code(200).build();
+        HttpResponse restartedFirstResponse = HttpResponse.builder().code(200).build();
+        HttpResponse restartedSecondResponse = HttpResponse.builder().code(200).build();
+        List<SourceRecord> pageRecords = asList(record(pageOffset), record(pageOffset));
+
+        givenTaskConfiguration();
+        given(config.getOffsetCounterField()).willReturn("offsetCounter");
+        given(config.getOffsetCounterTotalField()).willReturn("total");
+        given(config.getOffsetCounterAuthRestartsMax()).willReturn(1);
+        task.initialize(getContext(emptyMap()));
+        task.start(emptyMap());
+
+        given(requestFactory.createRequest(any())).willReturn(request);
+        given(client.execute(request)).willReturn(
+                firstResponse, refreshedResponse, restartedFirstResponse, restartedSecondResponse);
+        given(client.getAuthenticationGeneration()).willReturn(1L, 2L, 2L, 2L);
+        given(responseParser.parse(firstResponse)).willReturn(pageRecords);
+        given(responseParser.parse(restartedFirstResponse)).willReturn(pageRecords);
+        given(responseParser.parse(restartedSecondResponse)).willReturn(pageRecords);
+        given(recordSorter.sort(any())).willAnswer(invocation -> invocation.getArgument(0));
+        given(recordFilterFactory.create(any())).willReturn(__ -> true);
+
+        assertThat(task.poll()).hasSize(4);
+        assertThat(task.getOffset().toMap()).containsEntry("offsetCounter", 0L);
+        verify(responseParser, times(0)).parse(refreshedResponse);
+        verify(client, times(4)).execute(request);
     }
 
     @Test

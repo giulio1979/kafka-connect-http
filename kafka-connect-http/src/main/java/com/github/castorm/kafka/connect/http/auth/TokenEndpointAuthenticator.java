@@ -21,9 +21,11 @@ package com.github.castorm.kafka.connect.http.auth;
  */
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.castorm.kafka.connect.http.auth.spi.HttpAuthenticator;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import okhttp3.*;
 import org.apache.kafka.connect.errors.RetriableException;
@@ -49,6 +51,8 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
     private TokenEndpointAuthenticatorConfig config;
     private String cachedToken = null;
     private Instant tokenExpiry = Instant.EPOCH;
+    private Long responseExpiresInSeconds;
+    private long tokenGeneration;
 
     public TokenEndpointAuthenticator() {
         this(TokenEndpointAuthenticatorConfig::new);
@@ -77,9 +81,12 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
                     tokenExpiry = jwtExpiry.minusSeconds(TOKEN_EXPIRY_BUFFER_SECONDS);
                     log.info("Token refreshed. JWT exp: {}, will refresh at: {}", jwtExpiry, tokenExpiry);
                 } else {
-                    tokenExpiry = Instant.now().plusSeconds(config.getTokenExpirySeconds());
-                    log.info("Token refreshed (non-JWT). Will refresh at: {} (configured expiry: {}s)",
-                            tokenExpiry, config.getTokenExpirySeconds());
+                    long expiresIn = responseExpiresInSeconds != null
+                            ? responseExpiresInSeconds
+                            : config.getTokenExpirySeconds();
+                    long refreshBuffer = Math.min(TOKEN_EXPIRY_BUFFER_SECONDS, Math.max(1, expiresIn / 10));
+                    tokenExpiry = Instant.now().plusSeconds(Math.max(1, expiresIn - refreshBuffer));
+                    log.info("Token refreshed (non-JWT). Will refresh at: {} (expiry: {}s)", tokenExpiry, expiresIn);
                 }
             } catch (Exception e) {
                 log.error("Failed to refresh token", e);
@@ -88,6 +95,7 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
             if (cachedToken == null || cachedToken.isEmpty()) {
                 throw new RetriableException("Error: Access token is empty.");
             }
+            tokenGeneration++;
         }
         return Optional.of("Bearer " + cachedToken);
     }
@@ -116,25 +124,28 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
         String data = execute(config.getAuthUrl(), config.getAuthMethod(), config.getHeaders(), config.getAuthBody().value());
         String key = config.getAuthChainUrl() != null && !config.getAuthChainUrl().isEmpty() ?
                 config.getAuthChainTokenKey() : config.getTokenKeyPath();
-        String token = parseToken(data, key);
+        TokenResponse tokenResponse = parseToken(data, key);
 
         if (config.getAuthChainUrl() != null && !config.getAuthChainUrl().isEmpty()) {
-            String chainHeaders = config.getAuthChainHeaders().replace("{{token}}", token);
+            String chainHeaders = config.getAuthChainHeaders().replace("{{token}}", tokenResponse.token);
             String chainData = execute(config.getAuthChainUrl(), config.getAuthChainMethod(), chainHeaders, config.getAuthChainBody().value());
-            token = parseToken(chainData, config.getTokenKeyPath());
+            tokenResponse = parseToken(chainData, config.getTokenKeyPath());
         }
 
-        return token;
+        responseExpiresInSeconds = tokenResponse.expiresInSeconds;
+        return tokenResponse.token;
     }
 
-    private String parseToken(String response, String key) {
+    private TokenResponse parseToken(String response, String key) {
         ObjectMapper objectMapper = new ObjectMapper();
         try {
-            String token = objectMapper.readTree(response).path(key).asText();
+            JsonNode responseJson = objectMapper.readTree(response);
+            String token = responseJson.path(key).asText();
             if (token == null || token.isBlank()) {
-                throw new RetriableException("Error: No token found at " + key + " Response was: " + response);
+                throw new RetriableException("Error: No token found at " + key);
             }
-            return token;
+            long expiresIn = responseJson.path("expires_in").asLong(0);
+            return new TokenResponse(token, expiresIn > 0 ? expiresIn : null);
         } catch (JsonProcessingException e) {
             throw new RetriableException("Error: " + e.getMessage(), e);
         }
@@ -142,6 +153,18 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
 
     private boolean isTokenExpired() {
         return Instant.now().isAfter(tokenExpiry) || cachedToken == null || cachedToken.isEmpty();
+    }
+
+    @Override
+    public void invalidate() {
+        cachedToken = null;
+        tokenExpiry = Instant.EPOCH;
+        responseExpiresInSeconds = null;
+    }
+
+    @Override
+    public long getGeneration() {
+        return tokenGeneration;
     }
 
     private String execute(String url, String method, String headersStr, String bodyStr) {
@@ -153,11 +176,14 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
                     .url(url)
                     .headers(headers);
 
+            MediaType mediaType = MediaType.parse(Optional.ofNullable(headers.get("Content-Type"))
+                    .orElse("application/json"));
+
             if (method.equalsIgnoreCase("POST")) {
-                RequestBody body = RequestBody.create(MediaType.parse("application/json"), bodyStr.getBytes());
+                RequestBody body = RequestBody.create(mediaType, bodyStr.getBytes(StandardCharsets.UTF_8));
                 builder.post(body);
             } else if (method.equalsIgnoreCase("PUT")) {
-                RequestBody body = RequestBody.create(MediaType.parse("application/json"), bodyStr.getBytes());
+                RequestBody body = RequestBody.create(mediaType, bodyStr.getBytes(StandardCharsets.UTF_8));
                 builder.put(body);
             } else {
                 builder.get();
@@ -167,9 +193,8 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
                 String responseBody = response.body() != null ? response.body().string() : "";
 
                 if (!response.isSuccessful()) {
-                    log.error("Token endpoint {} returned HTTP {}: {}", url, response.code(), responseBody);
-                    throw new RetriableException(
-                            "Token endpoint returned HTTP " + response.code() + ": " + responseBody);
+                    log.error("Token endpoint {} returned HTTP {}", url, response.code());
+                    throw new RetriableException("Token endpoint returned HTTP " + response.code());
                 }
 
                 return responseBody;
@@ -178,6 +203,16 @@ public class TokenEndpointAuthenticator implements HttpAuthenticator {
             throw new RetriableException("Error: " + e.getMessage(), e);
         } catch (IllegalArgumentException e) {
             throw new ConnectException("Error: " + e.getMessage(), e);
+        }
+    }
+
+    private static class TokenResponse {
+        private final String token;
+        private final Long expiresInSeconds;
+
+        private TokenResponse(String token, Long expiresInSeconds) {
+            this.token = token;
+            this.expiresInSeconds = expiresInSeconds;
         }
     }
 }

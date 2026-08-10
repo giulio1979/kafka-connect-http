@@ -43,6 +43,7 @@ import static com.github.castorm.kafka.connect.common.ConfigUtils.breakDownMap;
 import static org.apache.kafka.common.config.ConfigDef.Importance.HIGH;
 import static org.apache.kafka.common.config.ConfigDef.Importance.LOW;
 import static org.apache.kafka.common.config.ConfigDef.Type.CLASS;
+import static org.apache.kafka.common.config.ConfigDef.Type.INT;
 import static org.apache.kafka.common.config.ConfigDef.Type.STRING;
 
 @Getter
@@ -61,6 +62,7 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     public static final String AUTODATE_BACKOFF = "http.offset.date_backoff";
     private static final String OFFSET_COUNTER_FIELD = "http.offset.counter";
     private static final String OFFSET_COUNTER_TOTAL_FIELD = "http.offset.counter.total.field";
+    private static final String OFFSET_COUNTER_AUTH_RESTARTS_MAX = "http.offset.counter.auth.restarts.max";
 
     private final TimerThrottler throttler;
     private final HttpRequestFactory requestFactory;
@@ -75,6 +77,7 @@ class HttpSourceConnectorConfig extends AbstractConfig {
     private String autoDateBackoff;
     private String offsetCounterField;
     private String offsetCounterTotalField;
+    private Integer offsetCounterAuthRestartsMax;
 
     HttpSourceConnectorConfig(Map<String, ?> originals) {
         super(config(), originals);
@@ -92,6 +95,7 @@ class HttpSourceConnectorConfig extends AbstractConfig {
         autoDateBackoff = getString(AUTODATE_BACKOFF);
         offsetCounterField = getString(OFFSET_COUNTER_FIELD);
         offsetCounterTotalField = getString(OFFSET_COUNTER_TOTAL_FIELD);
+        offsetCounterAuthRestartsMax = getInt(OFFSET_COUNTER_AUTH_RESTARTS_MAX);
     }
 
     public static ConfigDef config() {
@@ -108,6 +112,8 @@ class HttpSourceConnectorConfig extends AbstractConfig {
                 .define(AUTODATE_INCREMENT, STRING, "", HIGH, "Automatic Date Increment")
                 .define(AUTODATE_BACKOFF, STRING, "", HIGH, "Automatic Date Backoff")
                 .define(OFFSET_COUNTER_FIELD, STRING, "", LOW, "Counter-based paging: offset field name (e.g. offsetCounter). Empty = disabled.")
-                .define(OFFSET_COUNTER_TOTAL_FIELD, STRING, "total", LOW, "Counter-based paging: response body field containing total record count (e.g. total)");
+                .define(OFFSET_COUNTER_TOTAL_FIELD, STRING, "total", LOW, "Counter-based paging: response body field containing total record count (e.g. total)")
+                .define(OFFSET_COUNTER_AUTH_RESTARTS_MAX, INT, 1, ConfigDef.Range.atLeast(0), LOW,
+                    "Maximum number of times to restart counter pagination from zero after authentication changes");
     }
 }

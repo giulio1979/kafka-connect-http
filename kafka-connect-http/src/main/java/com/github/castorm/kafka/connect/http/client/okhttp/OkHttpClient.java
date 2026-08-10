@@ -20,6 +20,7 @@ package com.github.castorm.kafka.connect.http.client.okhttp;
  * #L%
  */
 
+import com.github.castorm.kafka.connect.http.auth.AuthenticationExpiredException;
 import com.github.castorm.kafka.connect.http.auth.spi.HttpAuthenticator;
 import com.github.castorm.kafka.connect.http.client.spi.HttpClient;
 import com.github.castorm.kafka.connect.http.model.HttpRequest;
@@ -93,14 +94,6 @@ public class OkHttpClient implements HttpClient {
                 .followSslRedirects(false)
                 .addInterceptor(createLoggingInterceptor())
                 .addInterceptor(chain -> chain.proceed(authorize(chain.request())))
-                .authenticator((route, response) -> {
-                    // If we already tried authorizing this response chain, don't retry with the same token
-                    if (response.request().header(AUTHORIZATION) != null) {
-                        log.warn("Received 401 despite having Authorization header — token may be stale, returning null to stop retry");
-                        return null;
-                    }
-                    return authorize(response.request());
-                })
                 .proxy(resolveProxy(config.getProxyHost(), config.getProxyPort()))
                 .proxyAuthenticator(resolveProxyAuthenticator(config.getProxyUsername(), config.getProxyPassword()));
 
@@ -196,8 +189,17 @@ public class OkHttpClient implements HttpClient {
         Call call = client.newCall(request);
 
         try (Response response = call.execute()) {
+            if (response.code() == 401) {
+                authenticator.invalidate();
+                throw new AuthenticationExpiredException("HTTP request was rejected with 401; cached authentication was invalidated");
+            }
             return mapHttpResponse(response);
         }
+    }
+
+    @Override
+    public long getAuthenticationGeneration() {
+        return authenticator.getGeneration();
     }
 
     private static Request mapHttpRequest(HttpRequest request) {

@@ -209,12 +209,18 @@ The counter value is available as `${offset.<counterField>}` in request URL / qu
 > *   Type: `String`
 > *   Default: `total`
 >
+> #### `http.offset.counter.auth.restarts.max`
+> Maximum number of times a counter-paginated snapshot may restart from offset `0` when authentication expires or refreshes. Partial records from the previous authentication generation are discarded because APIs such as Workday WQL may invalidate their pagination cache when issuing a new token.
+> *   Type: `Integer`
+> *   Default: `1`
+>
 
 **Minimal connector config (Workday WQL)**:
 ```properties
 # Enable counter paging
 http.offset.counter=offsetCounter
 http.offset.counter.total.field=total
+http.offset.counter.auth.restarts.max=1
 
 # Extract "total" from the response root so the counter logic can read it
 http.response.offset.pointer=total=/total
