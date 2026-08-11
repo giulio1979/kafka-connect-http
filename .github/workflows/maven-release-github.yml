@@ -27,6 +27,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'master' || github.ref }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -37,29 +38,67 @@ jobs:
           server-id: github
           settings-path: ${{ github.workspace }}
 
-      - name: Resolve and verify release version
+      - name: Resolve release version
         id: release
         shell: bash
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            VERSION="${INPUT_VERSION#v}"
+            if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+              echo "Invalid release version: ${INPUT_VERSION}" >&2
+              exit 1
+            fi
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set Maven project version
+        if: github.event_name == 'workflow_dispatch'
+        run: >-
+          mvn -B versions:set
+          -DnewVersion=${{ steps.release.outputs.version }}
+          -DprocessAllModules=true
+          -DgenerateBackupPoms=false
+
+      - name: Verify tag version matches project
+        if: github.event_name != 'workflow_dispatch'
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
           mvn -B help:evaluate \
             -Dexpression=project.version \
             -Doutput="${RUNNER_TEMP}/project-version.txt"
           VERSION="$(tr -d '[:space:]' < "${RUNNER_TEMP}/project-version.txt")"
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            RELEASE_TAG="v${INPUT_VERSION#v}"
-          else
-            RELEASE_TAG="${GITHUB_REF_NAME}"
-          fi
-          if [[ "v${VERSION}" != "${RELEASE_TAG}" ]]; then
-            echo "Release ${RELEASE_TAG} does not match project version v${VERSION}." >&2
+          if [[ "${VERSION}" != "${RELEASE_VERSION}" ]]; then
+            echo "Tag version ${RELEASE_VERSION} does not match project version ${VERSION}." >&2
             exit 1
           fi
-          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and publish Maven packages
-        run: mvn -B -Ppackage deploy --file pom.xml --settings "$GITHUB_WORKSPACE/settings.xml"
+      - name: Build and test release
+        run: mvn -B -Ppackage package --file pom.xml
+
+      - name: Commit version to master
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pom.xml '*/pom.xml'
+          if ! git diff --cached --quiet; then
+            git commit -m "release: v${RELEASE_VERSION}"
+            git push origin HEAD:master
+          fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Maven packages
+        run: mvn -B -Ppackage deploy -DskipTests --file pom.xml --settings "$GITHUB_WORKSPACE/settings.xml"
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -77,7 +116,7 @@ jobs:
           else
             RELEASE_ARGS=(--generate-notes --title "${RELEASE_TAG}")
             if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-              RELEASE_ARGS+=(--target "${GITHUB_SHA}")
+              RELEASE_ARGS+=(--target "$(git rev-parse HEAD)")
             else
               RELEASE_ARGS+=(--verify-tag)
             fi
