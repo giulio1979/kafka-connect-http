@@ -358,10 +358,10 @@ class HttpSourceTaskTest {
     @Test
     void givenAuthenticationRefreshesDuringCounterPaging_whenPoll_thenRestartsFromZero() throws Exception {
         Map<String, Object> pageOffset = new HashMap<>(ImmutableMap.of("total", 4));
-        HttpResponse firstResponse = HttpResponse.builder().code(200).build();
-        HttpResponse refreshedResponse = HttpResponse.builder().code(200).build();
-        HttpResponse restartedFirstResponse = HttpResponse.builder().code(200).build();
-        HttpResponse restartedSecondResponse = HttpResponse.builder().code(200).build();
+        HttpResponse firstResponse = HttpResponse.builder().code(200).body(new byte[] {1}).build();
+        HttpResponse refreshedResponse = HttpResponse.builder().code(200).body(new byte[] {2}).build();
+        HttpResponse restartedFirstResponse = HttpResponse.builder().code(200).body(new byte[] {3}).build();
+        HttpResponse restartedSecondResponse = HttpResponse.builder().code(200).body(new byte[] {4}).build();
         List<SourceRecord> pageRecords = asList(record(pageOffset), record(pageOffset));
 
         givenTaskConfiguration();
