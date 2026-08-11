@@ -115,7 +115,7 @@ jobs:
         run: git push origin HEAD:master
 
       - name: Publish Maven packages
-        run: mvn -B -Ppackage deploy -DskipTests --file pom.xml --settings "$GITHUB_WORKSPACE/settings.xml"
+        run: mvn -B -Ppackage deploy -DskipTests -DskipITs --file pom.xml --settings "$GITHUB_WORKSPACE/settings.xml"
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
