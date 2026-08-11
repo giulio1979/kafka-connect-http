@@ -59,7 +59,7 @@ jobs:
       - name: Set Maven project version
         if: github.event_name == 'workflow_dispatch'
         run: >-
-          mvn -B versions:set
+          mvn -B org.codehaus.mojo:versions-maven-plugin:2.18.0:set
           -DnewVersion=${{ steps.release.outputs.version }}
           -DprocessAllModules=true
           -DgenerateBackupPoms=false
@@ -93,9 +93,26 @@ jobs:
           git add pom.xml '*/pom.xml'
           if ! git diff --cached --quiet; then
             git commit -m "release: v${RELEASE_VERSION}"
-            git push origin HEAD:master
           fi
-          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify release tag target
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if git rev-parse "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            TAG_COMMIT="$(git rev-list -n 1 "${RELEASE_TAG}")"
+            HEAD_COMMIT="$(git rev-parse HEAD)"
+            if [[ "${TAG_COMMIT}" != "${HEAD_COMMIT}" ]]; then
+              echo "Tag ${RELEASE_TAG} already points to ${TAG_COMMIT}, not ${HEAD_COMMIT}." >&2
+              exit 1
+            fi
+          fi
+
+      - name: Push version to master
+        if: github.event_name == 'workflow_dispatch'
+        run: git push origin HEAD:master
 
       - name: Publish Maven packages
         run: mvn -B -Ppackage deploy -DskipTests --file pom.xml --settings "$GITHUB_WORKSPACE/settings.xml"
