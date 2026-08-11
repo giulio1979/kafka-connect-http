@@ -38,6 +38,7 @@ import org.apache.kafka.connect.storage.OffsetStorageReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -165,7 +166,7 @@ class HttpSourceTaskTest {
         task.initialize(getContext(offsetMap));
         task.start(emptyMap());
 
-        given(requestFactory.createRequest(offset)).willReturn(request);
+        given(requestFactory.createRequest(any())).willReturn(request);
         given(client.execute(request)).willReturn(response);
         given(responseParser.parse(response)).willReturn(asList(record(offsetMap)));
         given(recordSorter.sort(asList(record(offsetMap))))
@@ -232,7 +233,7 @@ class HttpSourceTaskTest {
         givenTaskConfiguration();
         task.initialize(getContext(offsetMap));
         task.start(emptyMap());
-        given(requestFactory.createRequest(offset)).willReturn(request);
+        given(requestFactory.createRequest(any())).willReturn(request);
         given(client.execute(request)).willReturn(response);
         given(responseParser.parse(response)).willReturn(asList(record(offsetMap)));
         given(recordFilterFactory.create(offset)).willReturn(__ -> true);
@@ -248,7 +249,7 @@ class HttpSourceTaskTest {
         givenTaskConfiguration();
         task.initialize(getContext(offsetMap));
         task.start(emptyMap());
-        given(requestFactory.createRequest(offset)).willReturn(request);
+        given(requestFactory.createRequest(any())).willReturn(request);
         given(client.execute(request)).willReturn(response);
         given(responseParser.parse(response)).willReturn(asList(record(offsetMap)));
         given(recordSorter.sort(asList(record(offsetMap)))).willReturn(asList(record(offsetMap)));
@@ -263,7 +264,7 @@ class HttpSourceTaskTest {
         givenTaskConfiguration();
         task.initialize(getContext(offsetMap));
         task.start(emptyMap());
-        given(requestFactory.createRequest(offset)).willReturn(request);
+        given(requestFactory.createRequest(any())).willReturn(request);
         given(client.execute(request)).willReturn(response);
         given(responseParser.parse(response)).willReturn(asList(record(offsetMap)));
         given(recordSorter.sort(asList(record(offsetMap)))).willReturn(asList(record(offsetMap(1)), record(offsetMap(2))));
@@ -278,7 +279,7 @@ class HttpSourceTaskTest {
         givenTaskConfiguration();
         task.initialize(getContext(offsetMap));
         task.start(emptyMap());
-        given(requestFactory.createRequest(offset)).willReturn(request);
+        given(requestFactory.createRequest(any())).willReturn(request);
         given(client.execute(request)).willReturn(response);
         given(responseParser.parse(response)).willReturn(asList(record(offsetMap)));
         given(recordFilterFactory.create(offset)).willReturn(__ -> false);
@@ -292,7 +293,7 @@ class HttpSourceTaskTest {
         givenTaskConfiguration();
         task.initialize(getContext(offsetMap));
         task.start(emptyMap());
-        given(requestFactory.createRequest(offset)).willReturn(request);
+        given(requestFactory.createRequest(any())).willReturn(request);
         given(client.execute(request)).willReturn(response);
         given(responseParser.parse(response)).willReturn(asList(record(offsetMap)));
         given(recordSorter.sort(asList(record(offsetMap))))
@@ -314,7 +315,7 @@ class HttpSourceTaskTest {
         givenTaskConfiguration();
         task.initialize(getContext(offsetMap));
         task.start(emptyMap());
-        given(requestFactory.createRequest(offset)).willReturn(request);
+        given(requestFactory.createRequest(any())).willReturn(request);
         given(client.execute(request)).willThrow(new IOException());
 
         assertThat(catchThrowable(() -> task.poll())).isInstanceOf(RetriableException.class);
@@ -385,6 +386,41 @@ class HttpSourceTaskTest {
         assertThat(task.getOffset().toMap().get("offsetCounter")).isEqualTo(0L);
         verify(responseParser, times(0)).parse(refreshedResponse);
         verify(client, times(4)).execute(request);
+    }
+
+    @Test
+    void givenRestoredCounterOffset_whenCounterPaging_thenPageOffsetStartsFromZero() throws Exception {
+        Map<String, Object> restoredOffset = new HashMap<>(ImmutableMap.of(
+                "offsetCounter", 20000L,
+                "pageOffset", 20000L));
+        Map<String, Object> responseOffset = new HashMap<>(ImmutableMap.of("total", 4));
+        HttpResponse firstResponse = HttpResponse.builder().code(200).body(new byte[] {1}).build();
+        HttpResponse secondResponse = HttpResponse.builder().code(200).body(new byte[] {2}).build();
+        List<SourceRecord> records = asList(record(responseOffset), record(responseOffset));
+
+        givenTaskConfiguration();
+        given(config.getOffsetCounterField()).willReturn("offsetCounter");
+        given(config.getOffsetCounterTotalField()).willReturn("total");
+        task.initialize(getContext(restoredOffset));
+        task.start(emptyMap());
+
+        given(requestFactory.createRequest(any())).willReturn(request);
+        given(client.execute(request)).willReturn(firstResponse, secondResponse);
+        given(responseParser.parse(firstResponse)).willReturn(records);
+        given(responseParser.parse(secondResponse)).willReturn(records);
+        given(recordSorter.sort(any())).willAnswer(invocation -> invocation.getArgument(0));
+        given(recordFilterFactory.create(any())).willReturn(__ -> true);
+
+        assertThat(task.poll()).hasSize(4);
+
+        ArgumentCaptor<Offset> requestOffsets = ArgumentCaptor.forClass(Offset.class);
+        verify(requestFactory, times(2)).createRequest(requestOffsets.capture());
+        assertThat(requestOffsets.getAllValues().get(0).toMap().get("offsetCounter")).isEqualTo(0L);
+        assertThat(requestOffsets.getAllValues().get(0).toMap().get("pageOffset")).isEqualTo(0L);
+        assertThat(requestOffsets.getAllValues().get(1).toMap().get("offsetCounter")).isEqualTo(2L);
+        assertThat(requestOffsets.getAllValues().get(1).toMap().get("pageOffset")).isEqualTo(2L);
+        assertThat(task.getOffset().toMap().get("offsetCounter")).isEqualTo(0L);
+        assertThat(task.getOffset().toMap().get("pageOffset")).isEqualTo(0L);
     }
 
     @Test

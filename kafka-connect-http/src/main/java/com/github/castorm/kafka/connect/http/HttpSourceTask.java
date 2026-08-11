@@ -47,9 +47,9 @@ import org.apache.kafka.connect.source.SourceTask;
 
 import java.io.IOException;
 import java.text.DateFormat;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -64,6 +64,7 @@ import static java.util.stream.Collectors.toList;
 public class HttpSourceTask extends SourceTask {
 
     public static final String AUTOTIMESTAMP = "AUTOTIMESTAMP";
+    public static final String PAGE_OFFSET = "pageOffset";
     private final Function<Map<String, String>, HttpSourceConnectorConfig> configFactory;
 
     private TimerThrottler throttler;
@@ -148,13 +149,8 @@ public class HttpSourceTask extends SourceTask {
         long authenticationGeneration = -1;
 
         if (counterPagingEnabled) {
-            Object existing = offset.toMap().get(offsetCounterField);
-            if (existing instanceof Number) {
-                offsetCounter = ((Number) existing).longValue();
-            } else if (existing instanceof String && !((String) existing).isEmpty()) {
-                try { offsetCounter = Long.parseLong((String) existing); } catch (NumberFormatException ignored) {}
-            }
             offset.setValue(offsetCounterField, offsetCounter);
+            offset.setValue(PAGE_OFFSET, offsetCounter);
         }
 
         if( autoDateInitialOffset != null && !autoDateInitialOffset.isEmpty()) {
@@ -183,7 +179,7 @@ public class HttpSourceTask extends SourceTask {
 
         boolean hasMorePages = true;
         while(hasMorePages) {
-            HttpRequest request = requestFactory.createRequest(offset);
+            HttpRequest request = requestFactory.createRequest(createRequestOffset(offsetCounter, counterPagingEnabled));
 
             log.info("Offset: {}", offset.toString());
             log.info("Request: {}", request.toString());
@@ -211,6 +207,7 @@ public class HttpSourceTask extends SourceTask {
                 total = Long.MAX_VALUE;
                 authenticationGeneration = -1;
                 offset.setValue(offsetCounterField, offsetCounter);
+                offset.setValue(PAGE_OFFSET, offsetCounter);
                 continue;
             }
 
@@ -229,6 +226,7 @@ public class HttpSourceTask extends SourceTask {
                 total = Long.MAX_VALUE;
                 authenticationGeneration = currentAuthenticationGeneration;
                 offset.setValue(offsetCounterField, offsetCounter);
+                offset.setValue(PAGE_OFFSET, offsetCounter);
                 continue;
             }
             authenticationGeneration = currentAuthenticationGeneration;
@@ -252,6 +250,7 @@ public class HttpSourceTask extends SourceTask {
                             allRecords.size(), total, offsetCounter, hasMorePages);
                     if (hasMorePages) {
                         offset.setValue(offsetCounterField, offsetCounter);
+                        offset.setValue(PAGE_OFFSET, offsetCounter);
                     }
                 } else {
                     hasMorePages = false;
@@ -291,8 +290,10 @@ public class HttpSourceTask extends SourceTask {
         if (counterPagingEnabled) {
             offsetCounter = 0;
             offset.setValue(offsetCounterField, offsetCounter);
+            offset.setValue(PAGE_OFFSET, offsetCounter);
             for (SourceRecord s : allRecords) {
                 ((Map<String, Object>) s.sourceOffset()).put(offsetCounterField, offsetCounter);
+                ((Map<String, Object>) s.sourceOffset()).put(PAGE_OFFSET, offsetCounter);
             }
         }
         log.info("Request for offset {} yields {}/{} new records", offset.toMap(), unseenRecords.size(), allRecords.size());
@@ -300,6 +301,14 @@ public class HttpSourceTask extends SourceTask {
         confirmationWindow = new ConfirmationWindow<>(extractOffsets(unseenRecords));
 
         return unseenRecords;
+    }
+
+    private Offset createRequestOffset(long pageOffset, boolean counterPagingEnabled) {
+        Map<String, Object> requestOffset = new HashMap<>(offset.toMap());
+        if (counterPagingEnabled) {
+            requestOffset.put(PAGE_OFFSET, pageOffset);
+        }
+        return Offset.of(requestOffset);
     }
 
     private HttpResponse execute(HttpRequest request) {

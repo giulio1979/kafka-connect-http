@@ -186,19 +186,19 @@ The first thing our connector will need to do is creating a `HttpRequest`.
 ### Counter-Based Pagination
 
 Numeric offset pagination for APIs that use a `limit` + `offset` (or `skip`) pattern, such as the [Workday WQL API](https://community.workday.com/sites/default/files/file-hosting/restapi/index.html#wql/v1/post-/data).
-When `http.offset.counter` is set, the connector maintains an integer counter in the offset. After each page request, the counter is incremented by the number of records returned. The connector compares the total records fetched so far against a `total` field extracted from the response (configurable via `http.offset.counter.total.field`). If `fetched < total`, another request is issued with the updated counter. The counter is reset to `0` after all pages have been consumed so the next poll cycle starts fresh.
+When `http.offset.counter` is set, the connector maintains an integer counter in the offset. After each page request, the counter is incremented by the number of records returned. The connector compares the total records fetched so far against a `total` field extracted from the response (configurable via `http.offset.counter.total.field`). If `fetched < total`, another request is issued with the updated counter. The counter is reset to `0` at the start of every poll and after all pages have been consumed so the next poll cycle starts fresh.
 
-The counter value is available as `${offset.<counterField>}` in request URL / query parameter / body templates.
+The per-poll pagination value is available as `${offset.pageOffset}` in request URL / query parameter / body templates. `pageOffset` is request-lifecycle state: it starts at `0` for each poll, advances only while fetching pages in that poll, and is reset before it is committed.
 
 **Example flow** for a Workday WQL endpoint returning max 10 000 records:
-1. Poll 1 – request with `offset=0`, response has `total=25000`, returns 10 000 records → counter becomes `10000`, loop continues.  
+1. Poll 1 – initial request without an offset parameter, response has `total=25000`, returns 10 000 records → counter becomes `10000`, loop continues.  
 2. Poll 1 – request with `offset=10000`, returns 10 000 records → counter becomes `20000`, loop continues.  
 3. Poll 1 – request with `offset=20000`, returns 5 000 records → `25000 >= 25000`, loop stops, counter is reset to `0`.  
-4. Poll 2 – starts again from `offset=0` (or from a new auto-date window if combined with `http.offset.date_initial_date`).
+4. Poll 2 – starts again with no offset parameter (or from a new auto-date window if combined with `http.offset.date_initial_date`).
 
 >
 > #### `http.offset.counter`
-> Name of the offset field used as the numeric page counter. Setting this property **enables** counter-based pagination. The field value is available in request templates as `${offset.<value>}`.
+> Name of the offset field used to enable numeric page counting. Setting this property **enables** counter-based pagination. Use `${offset.pageOffset}` in request templates for the current per-poll page offset.
 > *   Example: `offsetCounter`
 > *   Type: `String`
 > *   Default: `""` (disabled)
@@ -225,8 +225,8 @@ http.offset.counter.auth.restarts.max=1
 # Extract "total" from the response root so the counter logic can read it
 http.response.offset.pointer=total=/total
 
-# Use the counter in the request URL
-http.request.url=https://<host>/ccx/api/wql/v1/{tenant}/data?limit=10000&offset=${offset.offsetCounter}
+# Use pageOffset only after the initial request
+http.request.url=https://<host>/ccx/api/wql/v1/{tenant}/data?limit=10000<#if offset.pageOffset gt 0>&offset=${offset.pageOffset}</#if>
 http.request.body={"query": "SELECT workerId, ... FROM allWorkers WHERE ..."}
 ```
 
