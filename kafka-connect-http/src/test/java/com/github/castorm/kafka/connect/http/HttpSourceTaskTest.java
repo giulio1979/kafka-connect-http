@@ -351,7 +351,7 @@ class HttpSourceTaskTest {
         given(recordFilterFactory.create(any())).willReturn(__ -> true);
 
         assertThat(task.poll()).hasSize(4);
-        assertThat(task.getOffset().toMap()).containsEntry("offsetCounter", 0L);
+        assertThat(task.getOffset().toMap().get("offsetCounter")).isEqualTo(0L);
         verify(client, times(4)).execute(request);
     }
 
@@ -382,7 +382,7 @@ class HttpSourceTaskTest {
         given(recordFilterFactory.create(any())).willReturn(__ -> true);
 
         assertThat(task.poll()).hasSize(4);
-        assertThat(task.getOffset().toMap()).containsEntry("offsetCounter", 0L);
+        assertThat(task.getOffset().toMap().get("offsetCounter")).isEqualTo(0L);
         verify(responseParser, times(0)).parse(refreshedResponse);
         verify(client, times(4)).execute(request);
     }
