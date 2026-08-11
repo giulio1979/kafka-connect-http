@@ -61,7 +61,6 @@ import static java.net.Proxy.NO_PROXY;
 import static java.net.Proxy.Type.HTTP;
 import static java.util.Optional.empty;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static javax.ws.rs.core.HttpHeaders.AUTHORIZATION;
 import static okhttp3.Credentials.basic;
 import static okhttp3.HttpUrl.parse;
 import static okhttp3.RequestBody.create;
@@ -73,6 +72,8 @@ import static org.apache.commons.lang.StringUtils.isEmpty;
 
 @Slf4j
 public class OkHttpClient implements HttpClient {
+
+    private static final String AUTHORIZATION = "Authorization";
 
     private okhttp3.OkHttpClient client;
 

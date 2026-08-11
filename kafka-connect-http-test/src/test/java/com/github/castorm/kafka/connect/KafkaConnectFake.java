@@ -24,6 +24,7 @@ import com.github.castorm.kafka.connect.http.HttpSourceConnector;
 import com.github.castorm.kafka.connect.http.HttpSourceTask;
 import lombok.SneakyThrows;
 import lombok.experimental.UtilityClass;
+import org.apache.kafka.common.metrics.PluginMetrics;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTaskContext;
 import org.apache.kafka.connect.storage.OffsetStorageReader;
@@ -90,6 +91,11 @@ public class KafkaConnectFake {
                         return emptyMap();
                     }
                 };
+            }
+
+            @Override
+            public PluginMetrics pluginMetrics() {
+                return null;
             }
         };
     }
